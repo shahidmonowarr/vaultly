@@ -9,7 +9,12 @@ const DEMO_EMAIL = 'demo@vaultly.app';
 const DEMO_PASSWORD = 'demo-password-2026';
 
 async function seed() {
-  await ensureBucket(process.env.APP_ORIGIN ?? 'http://localhost:3000');
+  const origins = new Set(['http://localhost:3000']);
+  if (process.env.APP_ORIGIN) {
+    origins.add(process.env.APP_ORIGIN);
+  }
+
+  await ensureBucket([...origins]);
   console.log('storage bucket ready');
 
   const [existing] = await db

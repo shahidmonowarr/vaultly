@@ -35,7 +35,7 @@ async function uploadBytes(cookies: string, name: string, contents: Buffer, decl
   expect(ticketResponse.status).toBe(201);
   const { data: ticket } = await ticketResponse.json();
 
-  const uploaded = await fetch(ticket.parts[0].url, { method: 'PUT', body: contents });
+  const uploaded = await fetch(ticket.parts[0].url, { method: 'PUT', body: new Uint8Array(contents) });
   expect(uploaded.ok).toBe(true);
 
   return completeUpload(

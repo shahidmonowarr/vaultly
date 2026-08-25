@@ -43,7 +43,7 @@ export interface CompletedPart {
   etag: string;
 }
 
-export async function ensureBucket(allowedOrigin: string) {
+export async function ensureBucket(allowedOrigins: string[]) {
   try {
     await s3.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
   } catch {
@@ -65,7 +65,7 @@ export async function ensureBucket(allowedOrigin: string) {
         CORSConfiguration: {
           CORSRules: [
             {
-              AllowedOrigins: [allowedOrigin],
+              AllowedOrigins: allowedOrigins,
               AllowedMethods: ['PUT', 'GET', 'HEAD'],
               AllowedHeaders: ['*'],
               ExposeHeaders: ['ETag'],
@@ -75,7 +75,7 @@ export async function ensureBucket(allowedOrigin: string) {
         },
       }),
     );
-    logger.info('applied bucket cors policy', { origin: allowedOrigin });
+    logger.info('applied bucket cors policy', { origins: allowedOrigins });
   } catch (error) {
     logger.warn('could not set bucket cors, configure it on the provider', {
       reason: error instanceof Error ? error.name : String(error),
