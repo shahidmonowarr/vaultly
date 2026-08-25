@@ -13,8 +13,9 @@ Demo account: `demo@vaultly.app` / `demo-password-2026`
 - A dashboard to rename, search, filter, delete and toggle each file between private and public
 - Public files get a share page and a direct download link; making a file private again
   permanently invalidates the link that was handed out
-- Share pages preview images and PDFs in place, loaded from the storage host rather than
-  this origin, so a document carrying scripts cannot execute against the app
+- Images and PDFs preview in place, both on share pages and in the owner's dashboard;
+  previews load from the storage host rather than this origin, so a document carrying
+  scripts cannot execute against the app
 - Private files are reachable only by their owner, through URLs that expire after five minutes
 
 ## How uploads work
@@ -68,10 +69,12 @@ the API, which authorises the request and only then signs a URL that expires in 
 minutes. Public sharing works the same way, keyed off a 22 character slug rather than the
 file's database id, so links cannot be guessed or enumerated from an id.
 
-**Downloads are always attachments.** Every download is served with
+**Downloads default to attachments.** Every download is served with
 `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`. Only a short
-allowlist of formats — images, PDF, plain text, common audio and video — may render inline
-on a share page, which keeps uploaded HTML or SVG from executing under the app's origin.
+allowlist of formats — images, PDF, plain text, common audio and video — may render inline,
+which keeps uploaded HTML or SVG from executing under the app's origin. Asking for
+`?inline=1` on anything outside that list still returns an attachment. Previews are not
+counted as downloads.
 Executables and scripts are rejected by extension on the way in and by file signature
 after the fact.
 
@@ -110,7 +113,7 @@ All routes are under `/api/v1`. Errors share one envelope:
 | GET | `/files/:id` | One file |
 | PATCH | `/files/:id` | Rename, or change visibility |
 | DELETE | `/files/:id` | Delete the file and its object |
-| GET | `/files/:id/download` | 302 to a signed, expiring URL |
+| GET | `/files/:id/download` | 302 to a signed, expiring URL; `?inline=1` to preview |
 | POST | `/uploads` | Start an upload, returns presigned part URLs |
 | POST | `/uploads/:id/complete` | Verify and finalise an upload |
 | DELETE | `/uploads/:id` | Abort an upload and release its parts |
@@ -199,6 +202,12 @@ a share link going dead when the file is made private.
 
 Because those tests write and delete rows, the setup file refuses to run against a
 non-local `DATABASE_URL` unless `ALLOW_REMOTE_TEST_DB=true` is set.
+
+One note on framing: `X-Frame-Options` is `SAMEORIGIN` rather than `DENY`, because the
+preview embeds this app's own download endpoint and `DENY` blocks that before the request
+leaves the browser. `Content-Security-Policy: frame-ancestors 'self'` states the same rule
+for clients that prefer it. Cross-origin framing, which is what clickjacking requires, is
+still refused.
 
 ## Deployment
 

@@ -1,6 +1,8 @@
 import { customAlphabet } from 'nanoid';
 import { badRequest, unsupportedMediaType } from './errors';
 
+export { isInlineSafe, previewKind } from '../../lib/preview';
+
 const MAX_NAME_LENGTH = 255;
 
 // Executables and scripts are rejected outright: they carry no benefit for a file
@@ -9,13 +11,6 @@ const BLOCKED_EXTENSIONS = new Set([
   'exe', 'dll', 'bat', 'cmd', 'com', 'cpl', 'msi', 'msp', 'scr', 'hta', 'jar',
   'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'ps1', 'psm1', 'sh', 'bash', 'app',
   'dmg', 'pkg', 'deb', 'rpm', 'apk', 'php', 'phtml', 'asp', 'aspx', 'jsp',
-]);
-
-// Everything else is served as an attachment. Only these render inline, which keeps
-// stored HTML/SVG from executing under our origin.
-const INLINE_SAFE_MIME_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'application/pdf',
-  'text/plain', 'video/mp4', 'video/webm', 'audio/mpeg', 'audio/ogg', 'audio/wav',
 ]);
 
 const slugId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 22);
@@ -55,22 +50,6 @@ export function assertUploadableFile(name: string, mimeType: string) {
   }
 }
 
-export function isInlineSafe(mimeType: string) {
-  return INLINE_SAFE_MIME_TYPES.has(mimeType);
-}
-
-/**
- * What a share page may render in place, if anything. The preview is loaded from the
- * storage host rather than this origin, so even a PDF carrying scripts executes against
- * the bucket's origin and not ours.
- */
-export function previewKind(mimeType: string): 'image' | 'pdf' | null {
-  if (!isInlineSafe(mimeType)) return null;
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType === 'application/pdf') return 'pdf';
-
-  return null;
-}
 
 export function contentDisposition(name: string) {
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');

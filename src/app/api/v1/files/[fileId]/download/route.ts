@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireUser } from '@/server/http/auth';
 import { requireUuid } from '@/server/http/params';
 import { route } from '@/server/http/response';
-import { contentDisposition } from '@/server/lib/files';
+import { contentDisposition, isInlineSafe } from '@/server/lib/files';
 import { getOwnedFile, incrementDownloadCount } from '@/server/services/files';
 import { presignDownload } from '@/server/services/storage';
 
@@ -14,14 +14,20 @@ export const GET = route<Context>(async (request, context) => {
 
   const file = await getOwnedFile(userId, fileId);
 
+  const wantsPreview = new URL(request.url).searchParams.get('inline') === '1';
+  const inline = wantsPreview && isInlineSafe(file.mimeType);
+
   // The object itself is never public. Access is granted as a URL that expires in
   // five minutes and is signed only after ownership has been confirmed.
   const url = await presignDownload(file.storageKey, {
-    disposition: contentDisposition(file.name),
+    disposition: inline ? 'inline' : contentDisposition(file.name),
     contentType: file.mimeType,
   });
 
-  await incrementDownloadCount(file.id);
+  // Previewing your own file in the dashboard is not a download.
+  if (!inline) {
+    await incrementDownloadCount(file.id);
+  }
 
   return NextResponse.redirect(url, 302);
 });

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { POST as register } from '@/app/api/v1/auth/register/route';
+import { GET as downloadFile } from '@/app/api/v1/files/[fileId]/download/route';
 import { DELETE as removeFile, GET as getFile, PATCH as patchFile } from '@/app/api/v1/files/[fileId]/route';
 import { GET as listFiles } from '@/app/api/v1/files/route';
 import { GET as getShared } from '@/app/api/v1/share/[slug]/route';
@@ -22,12 +23,18 @@ async function signUp(account: typeof owner) {
   account.cookies = collectCookies(response);
 }
 
-async function uploadBytes(cookies: string, name: string, contents: Buffer, declaredSize = contents.length) {
+async function uploadBytes(
+  cookies: string,
+  name: string,
+  contents: Buffer,
+  declaredSize = contents.length,
+  mimeType = 'text/plain',
+) {
   const ticketResponse = await startUpload(
     jsonRequest('/api/v1/uploads', {
       method: 'POST',
       cookies,
-      body: { name, mimeType: 'text/plain', size: declaredSize },
+      body: { name, mimeType, size: declaredSize },
     }),
     undefined,
   );
@@ -165,5 +172,80 @@ describe('sharing', () => {
 
     const revoked = await getShared(jsonRequest(`/api/v1/share/${slug}`), params({ slug }));
     expect(revoked.status).toBe(404);
+  });
+});
+
+describe('owner downloads', () => {
+  it('serves a preview inline without counting it as a download', async () => {
+    const created = await uploadBytes(owner.cookies, 'poster.png', Buffer.from('not really a png'));
+    const { data } = await created.json();
+    const context = params({ fileId: data.id });
+
+    const preview = await downloadFile(
+      jsonRequest(`/api/v1/files/${data.id}/download?inline=1`, { cookies: owner.cookies }),
+      context,
+    );
+
+    expect(preview.status).toBe(302);
+    expect(decodeURIComponent(preview.headers.get('location')!)).toContain(
+      'response-content-disposition=inline',
+    );
+
+    const after = await getFile(
+      jsonRequest(`/api/v1/files/${data.id}`, { cookies: owner.cookies }),
+      context,
+    );
+
+    expect((await after.json()).data.downloadCount).toBe(0);
+  });
+
+  it('forces an attachment and counts a real download', async () => {
+    const created = await uploadBytes(owner.cookies, 'report.txt', Buffer.from('real download'));
+    const { data } = await created.json();
+    const context = params({ fileId: data.id });
+
+    const download = await downloadFile(
+      jsonRequest(`/api/v1/files/${data.id}/download`, { cookies: owner.cookies }),
+      context,
+    );
+
+    expect(download.status).toBe(302);
+    expect(decodeURIComponent(download.headers.get('location')!)).toContain(
+      'response-content-disposition=attachment',
+    );
+
+    const after = await getFile(
+      jsonRequest(`/api/v1/files/${data.id}`, { cookies: owner.cookies }),
+      context,
+    );
+
+    expect((await after.json()).data.downloadCount).toBe(1);
+  });
+
+  it('refuses to serve a type that is not inline safe as a preview', async () => {
+    const created = await uploadBytes(owner.cookies, 'page.html', Buffer.from('<h1>hi</h1>'), undefined, 'text/html');
+    const { data } = await created.json();
+
+    const attempt = await downloadFile(
+      jsonRequest(`/api/v1/files/${data.id}/download?inline=1`, { cookies: owner.cookies }),
+      params({ fileId: data.id }),
+    );
+
+    // The inline request is honoured only for formats on the allowlist.
+    expect(decodeURIComponent(attempt.headers.get('location')!)).toContain(
+      'response-content-disposition=attachment',
+    );
+  });
+
+  it('will not preview another account file', async () => {
+    const created = await uploadBytes(owner.cookies, 'mine.png', Buffer.from('mine'));
+    const { data } = await created.json();
+
+    const attempt = await downloadFile(
+      jsonRequest(`/api/v1/files/${data.id}/download?inline=1`, { cookies: stranger.cookies }),
+      params({ fileId: data.id }),
+    );
+
+    expect(attempt.status).toBe(404);
   });
 });
