@@ -13,6 +13,8 @@ Demo account: `demo@vaultly.app` / `demo-password-2026`
 - A dashboard to rename, search, filter, delete and toggle each file between private and public
 - Public files get a share page and a direct download link; making a file private again
   permanently invalidates the link that was handed out
+- Share pages preview images and PDFs in place, loaded from the storage host rather than
+  this origin, so a document carrying scripts cannot execute against the app
 - Private files are reachable only by their owner, through URLs that expire after five minutes
 
 ## How uploads work
@@ -116,7 +118,12 @@ All routes are under `/api/v1`. Errors share one envelope:
 | GET | `/share/:slug/download` | Public download, `?inline=1` to preview |
 
 Listing uses keyset pagination on `(created_at, id)` rather than `OFFSET`, so a page
-boundary stays correct while new files are being uploaded. The cursor is opaque.
+boundary stays correct while new files are being uploaded. The cursor is opaque, and the
+response carries a `total` for the active filters so the UI can show a real position
+rather than an endless scroll.
+
+Keyset pagination only produces a forward cursor, so the dashboard remembers the cursor
+that opened each page it has visited in order to offer a Previous button.
 
 ## Data model
 
@@ -181,12 +188,17 @@ token just to save that step would be the wrong trade.
 npm test
 ```
 
-Unit tests cover password hashing, filename sanitisation and the file type rules.
+Unit tests cover password hashing, filename sanitisation, the file type and preview rules,
+and the environment parsing.
 Integration tests run against the Docker services and drive the real route handlers: they
 cover registration and duplicate emails, the identical response for a wrong password and
 an unknown account, refresh rotation including replay detection, a full upload through
-MinIO, the size-mismatch rejection, cross-account access returning 404, and a share link
-going dead when the file is made private.
+MinIO, the size-mismatch rejection, cross-account access returning 404, paging through
+every file exactly once, the rate limiter tripping and staying scoped to one address, and
+a share link going dead when the file is made private.
+
+Because those tests write and delete rows, the setup file refuses to run against a
+non-local `DATABASE_URL` unless `ALLOW_REMOTE_TEST_DB=true` is set.
 
 ## Deployment
 

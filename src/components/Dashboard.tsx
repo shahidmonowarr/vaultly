@@ -12,32 +12,42 @@ import type { FileListResponse, SessionUser, StorageUsage, StoredFile } from '@/
 
 type Filter = 'all' | 'private' | 'public';
 
+const PAGE_SIZE = 10;
+
 export default function Dashboard() {
   const router = useRouter();
 
   const [user, setUser] = useState<SessionUser | null>(null);
   const [files, setFiles] = useState<StoredFile[]>([]);
   const [storage, setStorage] = useState<StorageUsage | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [page, setPage] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Keyset pagination only hands out a cursor for the next page, so the cursor that
+  // opened each visited page is kept here to make backwards navigation possible.
+  const cursors = useRef<(string | null)[]>([null]);
   const uploadCounter = useRef(0);
 
-  const loadFiles = useCallback(
-    async (options: { cursor?: string; search: string; filter: Filter }) => {
-      const params = new URLSearchParams({ limit: '20' });
-      if (options.cursor) params.set('cursor', options.cursor);
+  const loadPage = useCallback(
+    async (target: number, options: { search: string; filter: Filter }) => {
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+      const cursor = cursors.current[target];
+
+      if (cursor) params.set('cursor', cursor);
       if (options.search) params.set('search', options.search);
       if (options.filter !== 'all') params.set('visibility', options.filter);
 
       const response = await api<FileListResponse>(`/api/v1/files?${params}`);
 
-      setFiles((current) => (options.cursor ? [...current, ...response.data] : response.data));
+      setFiles(response.data);
       setNextCursor(response.pagination.nextCursor);
+      setTotal(response.pagination.total);
       setStorage(response.storage);
     },
     [],
@@ -50,19 +60,41 @@ export default function Dashboard() {
   }, [router]);
 
   useEffect(() => {
+    cursors.current = [null];
+    setPage(0);
+  }, [search, filter]);
+
+  useEffect(() => {
     if (!user) return;
 
-    const timer = setTimeout(() => {
-      setLoading(true);
-      loadFiles({ search, filter })
-        .catch((cause) =>
-          setError(cause instanceof RequestError ? cause.message : 'Could not load your files'),
-        )
-        .finally(() => setLoading(false));
-    }, search ? 250 : 0);
+    const timer = setTimeout(
+      () => {
+        setLoading(true);
+        setError(null);
+        loadPage(page, { search, filter })
+          .catch((cause) =>
+            setError(cause instanceof RequestError ? cause.message : 'Could not load your files'),
+          )
+          .finally(() => setLoading(false));
+      },
+      search ? 250 : 0,
+    );
 
     return () => clearTimeout(timer);
-  }, [user, search, filter, loadFiles]);
+  }, [user, search, filter, page, loadPage]);
+
+  function refreshCurrentPage() {
+    void loadPage(page, { search, filter }).catch(() => undefined);
+  }
+
+  function goToFirstPage() {
+    cursors.current = [null];
+    if (page === 0) {
+      refreshCurrentPage();
+    } else {
+      setPage(0);
+    }
+  }
 
   function startUploads(selected: File[]) {
     for (const file of selected) {
@@ -81,14 +113,20 @@ export default function Dashboard() {
 
       setUploads((current) => [
         ...current,
-        { id, name: file.name, size: file.size, loaded: 0, status: 'uploading', cancel: handle.cancel },
+        {
+          id,
+          name: file.name,
+          size: file.size,
+          loaded: 0,
+          status: 'uploading',
+          cancel: handle.cancel,
+        },
       ]);
 
       handle.result
-        .then((stored) => {
+        .then(() => {
           setUploads((current) => current.filter((item) => item.id !== id));
-          setFiles((current) => [stored, ...current]);
-          void loadFiles({ search, filter });
+          goToFirstPage();
         })
         .catch((cause) => {
           if (isCancelled(cause)) {
@@ -137,8 +175,13 @@ export default function Dashboard() {
     if (!window.confirm(`Delete "${file.name}"? This cannot be undone.`)) return;
 
     await api(`/api/v1/files/${file.id}`, { method: 'DELETE' });
-    setFiles((current) => current.filter((item) => item.id !== file.id));
-    setStorage((current) => (current ? { ...current, used: current.used - file.size } : current));
+
+    // Removing the last row of a page would leave it empty, so step back if that happens.
+    if (files.length === 1 && page > 0) {
+      setPage(page - 1);
+    } else {
+      refreshCurrentPage();
+    }
   }
 
   async function signOut() {
@@ -151,6 +194,8 @@ export default function Dashboard() {
   }
 
   const usedPercent = storage ? Math.min(100, (storage.used / storage.quota) * 100) : 0;
+  const firstOnPage = total === 0 ? 0 : page * PAGE_SIZE + 1;
+  const lastOnPage = page * PAGE_SIZE + files.length;
 
   return (
     <div className="mx-auto max-w-4xl px-5 py-10">
@@ -169,10 +214,7 @@ export default function Dashboard() {
       </header>
 
       <section className="mt-8">
-        <Dropzone
-          maxFileSize={storage?.maxFileSize ?? 512 * 1024 * 1024}
-          onFiles={startUploads}
-        />
+        <Dropzone maxFileSize={storage?.maxFileSize ?? 512 * 1024 * 1024} onFiles={startUploads} />
         <UploadList
           uploads={uploads}
           onDismiss={(id) => setUploads((current) => current.filter((item) => item.id !== id))}
@@ -188,7 +230,10 @@ export default function Dashboard() {
             <span>{Math.round(usedPercent)}%</span>
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
-            <div className="h-full rounded-full bg-[var(--color-ink)]" style={{ width: `${usedPercent}%` }} />
+            <div
+              className="h-full rounded-full bg-[var(--color-ink)]"
+              style={{ width: `${usedPercent}%` }}
+            />
           </div>
         </section>
       )}
@@ -244,14 +289,34 @@ export default function Dashboard() {
           )}
         </ul>
 
-        {nextCursor && (
-          <button
-            type="button"
-            onClick={() => loadFiles({ cursor: nextCursor, search, filter })}
-            className="mt-4 w-full rounded-lg border border-[var(--color-line)] bg-white py-2.5 text-sm font-medium transition hover:border-gray-300"
-          >
-            Load more
-          </button>
+        {total > 0 && (
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="text-xs text-[var(--color-muted)]">
+              {firstOnPage}–{lastOnPage} of {total}
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={page === 0 || loading}
+                onClick={() => setPage(page - 1)}
+                className="rounded-lg border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-medium transition hover:border-gray-300 disabled:opacity-40 disabled:hover:border-[var(--color-line)]"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={!nextCursor || loading}
+                onClick={() => {
+                  cursors.current[page + 1] = nextCursor;
+                  setPage(page + 1);
+                }}
+                className="rounded-lg border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-medium transition hover:border-gray-300 disabled:opacity-40 disabled:hover:border-[var(--color-line)]"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         )}
       </section>
     </div>

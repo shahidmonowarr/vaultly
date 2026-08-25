@@ -4,6 +4,7 @@ import {
   assertUploadableFile,
   contentDisposition,
   isInlineSafe,
+  previewKind,
   sanitizeFileName,
 } from '@/server/lib/files';
 
@@ -58,5 +59,21 @@ describe('isInlineSafe', () => {
     expect(isInlineSafe('text/html')).toBe(false);
     expect(isInlineSafe('image/svg+xml')).toBe(false);
     expect(isInlineSafe('image/png')).toBe(true);
+  });
+});
+
+describe('previewKind', () => {
+  it('previews images and pdfs', () => {
+    expect(previewKind('image/png')).toBe('image');
+    expect(previewKind('application/pdf')).toBe('pdf');
+  });
+
+  it('refuses to preview anything that could execute in our origin', () => {
+    expect(previewKind('text/html')).toBeNull();
+    expect(previewKind('image/svg+xml')).toBeNull();
+  });
+
+  it('returns null for formats with no viewer', () => {
+    expect(previewKind('application/zip')).toBeNull();
   });
 });

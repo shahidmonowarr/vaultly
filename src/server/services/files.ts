@@ -50,7 +50,7 @@ function decodeCursor(cursor: string) {
   return { date, id };
 }
 
-export async function listFiles(userId: string, options: ListOptions) {
+function buildFilters(userId: string, options: Pick<ListOptions, 'search' | 'visibility'>) {
   const conditions = [
     eq(files.ownerId, userId),
     eq(files.status, 'ready'),
@@ -65,6 +65,21 @@ export async function listFiles(userId: string, options: ListOptions) {
     const pattern = `%${options.search.replace(/[%_\\]/g, (match) => `\\${match}`)}%`;
     conditions.push(sql`${files.name} ILIKE ${pattern}`);
   }
+
+  return conditions;
+}
+
+export async function countFiles(userId: string, options: Pick<ListOptions, 'search' | 'visibility'>) {
+  const [row] = await db
+    .select({ total: sql<string>`count(*)` })
+    .from(files)
+    .where(and(...buildFilters(userId, options)));
+
+  return Number(row?.total ?? 0);
+}
+
+export async function listFiles(userId: string, options: ListOptions) {
+  const conditions = buildFilters(userId, options);
 
   const cursor = options.cursor ? decodeCursor(options.cursor) : null;
   if (cursor) {

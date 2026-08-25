@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { formatBytes, formatDate } from '@/lib/format';
-import { isInlineSafe } from '@/server/lib/files';
+import { previewKind } from '@/server/lib/files';
 import { findSharedFile } from '@/server/services/files';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export default async function SharePage({ params }: Props) {
   }
 
   const downloadUrl = `/api/v1/share/${slug}/download`;
-  const showPreview = isInlineSafe(file.mimeType) && file.mimeType.startsWith('image/');
+  const preview = previewKind(file.mimeType);
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-6 py-12">
@@ -35,13 +35,38 @@ export default async function SharePage({ params }: Props) {
           {formatDate(file.createdAt.toISOString())}
         </p>
 
-        {showPreview && (
+        {preview === 'image' && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={`${downloadUrl}?inline=1`}
             alt={file.name}
             className="mt-6 max-h-80 w-full rounded-xl border border-[var(--color-line)] object-contain"
           />
+        )}
+
+        {preview === 'pdf' && (
+          // <object> rather than <iframe> so browsers without an inline PDF viewer, which
+          // includes most mobile ones, get the fallback below instead of a blank frame.
+          <object
+            data={`${downloadUrl}?inline=1`}
+            type="application/pdf"
+            aria-label={`Preview of ${file.name}`}
+            className="mt-6 h-96 w-full rounded-xl border border-[var(--color-line)] bg-gray-50"
+          >
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+              <p className="text-sm text-[var(--color-muted)]">
+                This browser cannot show PDFs inline.
+              </p>
+              <a
+                href={`${downloadUrl}?inline=1`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-[var(--color-accent)]"
+              >
+                Open it in a new tab
+              </a>
+            </div>
+          </object>
         )}
 
         <a

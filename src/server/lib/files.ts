@@ -59,6 +59,19 @@ export function isInlineSafe(mimeType: string) {
   return INLINE_SAFE_MIME_TYPES.has(mimeType);
 }
 
+/**
+ * What a share page may render in place, if anything. The preview is loaded from the
+ * storage host rather than this origin, so even a PDF carrying scripts executes against
+ * the bucket's origin and not ours.
+ */
+export function previewKind(mimeType: string): 'image' | 'pdf' | null {
+  if (!isInlineSafe(mimeType)) return null;
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType === 'application/pdf') return 'pdf';
+
+  return null;
+}
+
 export function contentDisposition(name: string) {
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;

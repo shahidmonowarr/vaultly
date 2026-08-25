@@ -18,7 +18,7 @@ export interface StorageUsage {
 
 export interface FileListResponse {
   data: StoredFile[];
-  pagination: { nextCursor: string | null; limit: number };
+  pagination: { nextCursor: string | null; limit: number; total: number };
   storage: StorageUsage;
 }
 
