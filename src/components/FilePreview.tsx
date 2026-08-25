@@ -19,20 +19,14 @@ export default function FilePreview({ url, name, kind, className = 'h-96' }: Pro
 
   return (
     <div>
-      {/* <object> rather than <iframe> so a browser with no inline PDF viewer, which is
-          most mobile ones, falls through to the message below instead of a blank frame. */}
-      <object
-        data={url}
-        type="application/pdf"
-        aria-label={`Preview of ${name}`}
+      {/* Chrome renders PDFs in an iframe but not in an <object>, which silently paints
+          nothing. Mobile browsers generally render neither, hence the link below. */}
+      <iframe
+        src={url}
+        title={`Preview of ${name}`}
         className={`w-full rounded-xl border border-[var(--color-line)] bg-gray-50 ${className}`}
-      >
-        <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-          <p className="text-sm text-[var(--color-muted)]">This browser cannot show PDFs inline.</p>
-        </div>
-      </object>
+      />
 
-      {/* Always offered, because an embedded viewer can fail silently. */}
       <a
         href={url}
         target="_blank"
