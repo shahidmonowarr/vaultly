@@ -35,8 +35,9 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3.5 sm:flex-nowrap">
-      <div className="min-w-0 flex-1">
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:flex-nowrap">
+      {/* Full width on small screens so the name keeps its line and the actions wrap under it. */}
+      <div className="w-full min-w-0 sm:w-auto sm:flex-1">
         {editing ? (
           <form
             onSubmit={async (event) => {
@@ -86,7 +87,7 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
         {file.visibility === 'public' ? 'Public' : 'Private'}
       </button>
 
-      <div className="flex items-center gap-3 text-xs font-medium">
+      <div className="ml-auto flex items-center gap-3 text-xs font-medium">
         {file.shareUrl && (
           <button type="button" onClick={copyLink} className="hover:text-[var(--color-accent)]">
             {copied ? 'Copied' : 'Copy link'}
