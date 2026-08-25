@@ -47,28 +47,40 @@ export async function ensureBucket(allowedOrigin: string) {
   try {
     await s3.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
   } catch {
-    await s3.send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
-    logger.info('created storage bucket', { bucket: env.S3_BUCKET });
+    await s3
+      .send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }))
+      .then(() => logger.info('created storage bucket', { bucket: env.S3_BUCKET }))
+      .catch((error) => {
+        if (error?.name !== 'BucketAlreadyOwnedByYou') throw error;
+      });
   }
 
-  // The browser PUTs parts straight at the bucket, so it needs CORS and it needs to
-  // read back the ETag header of every part to complete the upload.
-  await s3.send(
-    new PutBucketCorsCommand({
-      Bucket: env.S3_BUCKET,
-      CORSConfiguration: {
-        CORSRules: [
-          {
-            AllowedOrigins: [allowedOrigin],
-            AllowedMethods: ['PUT', 'GET', 'HEAD'],
-            AllowedHeaders: ['*'],
-            ExposeHeaders: ['ETag'],
-            MaxAgeSeconds: 3600,
-          },
-        ],
-      },
-    }),
-  );
+  // The browser PUTs parts straight at the bucket, so it needs CORS and it needs to read
+  // back the ETag of every part. MinIO answers NotImplemented here because it takes its
+  // CORS policy from MINIO_API_CORS_ALLOW_ORIGIN instead, which docker-compose sets.
+  try {
+    await s3.send(
+      new PutBucketCorsCommand({
+        Bucket: env.S3_BUCKET,
+        CORSConfiguration: {
+          CORSRules: [
+            {
+              AllowedOrigins: [allowedOrigin],
+              AllowedMethods: ['PUT', 'GET', 'HEAD'],
+              AllowedHeaders: ['*'],
+              ExposeHeaders: ['ETag'],
+              MaxAgeSeconds: 3600,
+            },
+          ],
+        },
+      }),
+    );
+    logger.info('applied bucket cors policy', { origin: allowedOrigin });
+  } catch (error) {
+    logger.warn('could not set bucket cors, configure it on the provider', {
+      reason: error instanceof Error ? error.name : String(error),
+    });
+  }
 }
 
 export async function createMultipartUpload(key: string, contentType: string) {
