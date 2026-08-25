@@ -166,8 +166,14 @@ Generate a secret with `openssl rand -hex 32`.
 
 The storage layer is plain S3 API calls, so any S3-compatible provider works without a
 code change. The bucket needs a CORS rule that allows `PUT` from the app's origin and
-exposes the `ETag` header; `npm run db:seed` applies one automatically where the provider
-supports it.
+exposes the `ETag` header — without `ExposeHeaders: ["ETag"]` the parts upload but cannot
+be completed.
+
+`npm run db:seed` tries to apply that rule, using `APP_ORIGIN` alongside localhost. It is
+best effort by design: the credentials the app runs with are scoped to reading and writing
+objects, so on a provider that treats CORS as a bucket administration call the attempt is
+refused and the rule has to be set once in the provider's console. Widening the runtime
+token just to save that step would be the wrong trade.
 
 ## Tests
 
