@@ -24,7 +24,13 @@ const schema = z.object({
   USER_QUOTA_BYTES: z.coerce.number().int().positive().default(2 * 1024 * 1024 * 1024),
 });
 
-const parsed = schema.safeParse(process.env);
+// Hosting dashboards hand back an empty string for a variable that was added but left
+// blank. Treat that as absent so optional settings keep their defaults.
+const provided = Object.fromEntries(
+  Object.entries(process.env).filter(([, value]) => value !== undefined && value !== ''),
+);
+
+const parsed = schema.safeParse(provided);
 
 if (!parsed.success) {
   const issues = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
