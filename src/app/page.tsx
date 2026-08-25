@@ -26,6 +26,17 @@ export default function HomePage() {
           Sign in
         </Link>
       </div>
+
+      <p className="mt-16 text-sm text-[var(--color-muted)]">
+        <a
+          href="https://github.com/shahidmonowarr/vaultly"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:text-[var(--color-ink)]"
+        >
+          Source on GitHub
+        </a>
+      </p>
     </main>
   );
 }
