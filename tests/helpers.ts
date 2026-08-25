@@ -11,7 +11,7 @@ export const BASE_URL = 'http://localhost:3000';
  * It has to be random rather than a counter: test files run in separate workers, and a
  * counter would hand every file the same first address.
  */
-function randomAddress() {
+export function randomAddress() {
   const octet = () => Math.floor(Math.random() * 256);
   return `10.${octet()}.${octet()}.${octet()}`;
 }

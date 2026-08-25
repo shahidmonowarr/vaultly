@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { POST as register } from '@/app/api/v1/auth/register/route';
-import { jsonRequest, uniqueEmail } from '../helpers';
+import { jsonRequest, randomAddress, uniqueEmail } from '../helpers';
 
 describe('rate limiting', () => {
+  // Fresh addresses per run: the limiter keeps its counters in the database, so reusing
+  // a fixed address would make the result depend on how recently the suite last ran.
   it('blocks a burst of registrations from one address', async () => {
-    const ip = '203.0.113.7';
+    const ip = randomAddress();
     const statuses: number[] = [];
 
     for (let attempt = 0; attempt < 7; attempt += 1) {
@@ -26,20 +28,33 @@ describe('rate limiting', () => {
       }
     }
 
-    expect(statuses.filter((status) => status === 429).length).toBeGreaterThan(0);
-    expect(statuses.slice(-1)[0]).toBe(429);
+    expect(statuses[0]).toBe(201);
+    expect(statuses.at(-1)).toBe(429);
   }, 30_000);
 
   it('does not penalise a different address', async () => {
-    const response = await register(
+    const blocked = randomAddress();
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await register(
+        jsonRequest('/api/v1/auth/register', {
+          method: 'POST',
+          ip: blocked,
+          body: { email: uniqueEmail(), password: 'a-long-enough-password' },
+        }),
+        undefined,
+      );
+    }
+
+    const other = await register(
       jsonRequest('/api/v1/auth/register', {
         method: 'POST',
-        ip: '198.51.100.4',
+        ip: randomAddress(),
         body: { email: uniqueEmail(), password: 'a-long-enough-password' },
       }),
       undefined,
     );
 
-    expect(response.status).toBe(201);
-  });
+    expect(other.status).toBe(201);
+  }, 30_000);
 });
