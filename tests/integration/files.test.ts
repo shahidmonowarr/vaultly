@@ -92,6 +92,26 @@ describe('upload lifecycle', () => {
     expect(response.status).toBe(400);
   });
 
+  it('rejects an executable that was renamed to look like a document', async () => {
+    // 0xCAFEBABE is a Mach-O universal binary, and also a Java class file. Either way
+    // the extension and declared type say PDF and the bytes say otherwise.
+    const machO = Buffer.concat([
+      Buffer.from([0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00, 0x00, 0x02]),
+      Buffer.alloc(512, 0x41),
+    ]);
+
+    const response = await uploadBytes(
+      owner.cookies,
+      'annual-report.pdf',
+      machO,
+      undefined,
+      'application/pdf',
+    );
+
+    expect(response.status).toBe(415);
+    expect((await response.json()).error.code).toBe('UNSUPPORTED_MEDIA_TYPE');
+  });
+
   it('refuses to start an upload for an executable', async () => {
     const response = await startUpload(
       jsonRequest('/api/v1/uploads', {

@@ -24,6 +24,9 @@ const PART_SIZE = 8 * 1024 * 1024;
 const MAX_PARTS = 10_000;
 const SNIFF_BYTES = 4_100;
 
+// Matched against the sniffed signature, not the declared type. Note java-vm: a Mach-O
+// universal binary opens with the same 0xCAFEBABE magic as a Java class file, so a macOS
+// executable renamed to .pdf arrives labelled as one.
 const EXECUTABLE_SIGNATURES = new Set([
   'application/x-msdownload',
   'application/x-dosexec',
@@ -31,7 +34,12 @@ const EXECUTABLE_SIGNATURES = new Set([
   'application/x-executable',
   'application/x-mach-binary',
   'application/x-elf',
+  'application/x-sharedlib',
   'application/java-archive',
+  'application/java-vm',
+  'application/vnd.android.package-archive',
+  'application/x-apple-diskimage',
+  'application/wasm',
 ]);
 
 export interface UploadTicket {
