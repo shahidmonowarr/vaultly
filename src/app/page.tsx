@@ -5,8 +5,8 @@ import { ACCESS_COOKIE, REFRESH_COOKIE } from '@/lib/constants';
 
 const FACTS = [
   ['512 MB', 'largest single file'],
-  ['3', 'parts in flight at once'],
-  ['5 min', 'download link lifetime'],
+  ['0 bytes', 'pass through our server'],
+  ['1 click', 'to take a shared link back'],
 ];
 
 export default async function HomePage() {
