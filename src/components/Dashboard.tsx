@@ -190,71 +190,74 @@ export default function Dashboard() {
   }
 
   if (!user) {
-    return <p className="p-8 text-sm text-[var(--color-muted)]">Loading…</p>;
+    return (
+      <div className="flex min-h-dvh items-center justify-center">
+        <p className="font-mono text-[13px] text-ink-3">loading your files</p>
+      </div>
+    );
   }
 
   const usedPercent = storage ? Math.min(100, (storage.used / storage.quota) * 100) : 0;
   const firstOnPage = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const lastOnPage = page * PAGE_SIZE + files.length;
+  const filtered = Boolean(search) || filter !== 'all';
 
   return (
-    <div className="mx-auto max-w-4xl px-5 py-10">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-[var(--color-accent)]">Vaultly</p>
-          <p className="text-xs text-[var(--color-muted)]">{user.email}</p>
+    <div className="min-h-dvh">
+      <header className="sticky top-0 z-10 border-b border-line bg-surface/85 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-3.5">
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-base font-bold tracking-tight">Vaultly</span>
+            <span className="hidden truncate font-mono text-xs text-ink-3 sm:block">
+              {user.email}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={signOut}
+            className="rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium transition hover:border-ink"
+          >
+            Sign out
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={signOut}
-          className="rounded-lg border border-[var(--color-line)] bg-white px-3.5 py-2 text-sm font-medium transition hover:border-gray-300"
-        >
-          Sign out
-        </button>
       </header>
 
-      <section className="mt-8">
+      <main className="mx-auto max-w-5xl px-5 pb-20 pt-7">
         <Dropzone maxFileSize={storage?.maxFileSize ?? 512 * 1024 * 1024} onFiles={startUploads} />
         <UploadList
           uploads={uploads}
           onDismiss={(id) => setUploads((current) => current.filter((item) => item.id !== id))}
         />
-      </section>
 
-      {storage && (
-        <section className="mt-8">
-          <div className="flex items-center justify-between text-xs text-[var(--color-muted)]">
-            <span>
-              {formatBytes(storage.used)} of {formatBytes(storage.quota)} used
+        {storage && (
+          <div className="mt-6 flex items-center gap-3">
+            <div className="h-1 w-32 overflow-hidden rounded-full bg-line">
+              <div className="h-full rounded-full bg-ink" style={{ width: `${usedPercent}%` }} />
+            </div>
+            <span className="tabular font-mono text-xs text-ink-3">
+              {formatBytes(storage.used)} of {formatBytes(storage.quota)}
             </span>
-            <span>{Math.round(usedPercent)}%</span>
           </div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100">
-            <div
-              className="h-full rounded-full bg-[var(--color-ink)]"
-              style={{ width: `${usedPercent}%` }}
-            />
-          </div>
-        </section>
-      )}
+        )}
 
-      <section className="mt-8">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
           <input
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search files"
-            className="min-w-0 flex-1 rounded-lg border border-[var(--color-line)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+            className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition focus:border-accent"
           />
-          <div className="flex rounded-lg border border-[var(--color-line)] bg-white p-0.5">
+
+          <div className="flex rounded-xl border border-line bg-surface p-1">
             {(['all', 'private', 'public'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => setFilter(value)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize transition ${
-                  filter === value ? 'bg-[var(--color-ink)] text-white' : 'text-[var(--color-muted)]'
+                className={`rounded-lg px-3 py-1.5 font-mono text-xs transition ${
+                  filter === value ? 'bg-ink text-white' : 'text-ink-3 hover:text-ink'
                 }`}
               >
                 {value}
@@ -264,34 +267,54 @@ export default function Dashboard() {
         </div>
 
         {error && (
-          <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p
+            role="alert"
+            className="mt-4 rounded-xl border border-[#f2c8c4] bg-[#fdf2f1] px-4 py-3 text-sm text-danger"
+          >
             {error}
           </p>
         )}
 
-        <ul className="mt-4 divide-y divide-[var(--color-line)] overflow-hidden rounded-2xl border border-[var(--color-line)] bg-white">
-          {files.map((file) => (
-            <FileRow
-              key={file.id}
-              file={file}
-              onRename={renameFile}
-              onToggleVisibility={toggleVisibility}
-              onDelete={deleteFile}
-            />
-          ))}
-
-          {files.length === 0 && !loading && (
-            <li className="px-4 py-12 text-center text-sm text-[var(--color-muted)]">
-              {search || filter !== 'all'
-                ? 'Nothing matches those filters.'
-                : 'No files yet. Drop one above to get started.'}
-            </li>
+        <section className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
+          {files.length > 0 && (
+            <div className="hidden grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_5rem_16.5rem] gap-x-4 border-b border-line px-5 py-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-3 sm:grid">
+              <span>Name</span>
+              <span>Size</span>
+              <span>Added</span>
+              <span>Visibility</span>
+              <span className="sr-only">Actions</span>
+            </div>
           )}
-        </ul>
+
+          <ul className="divide-y divide-line">
+            {files.map((file) => (
+              <FileRow
+                key={file.id}
+                file={file}
+                onRename={renameFile}
+                onToggleVisibility={toggleVisibility}
+                onDelete={deleteFile}
+              />
+            ))}
+
+            {files.length === 0 && !loading && (
+              <li className="px-5 py-16 text-center">
+                <p className="font-display text-lg font-semibold">
+                  {filtered ? 'Nothing matches those filters' : 'No files yet'}
+                </p>
+                <p className="mt-1.5 text-sm text-ink-3">
+                  {filtered
+                    ? 'Try a different search, or switch back to all.'
+                    : 'Drop one above. It stays private until you publish a link.'}
+                </p>
+              </li>
+            )}
+          </ul>
+        </section>
 
         {total > 0 && (
           <div className="mt-4 flex items-center justify-between gap-3">
-            <p className="text-xs text-[var(--color-muted)]">
+            <p className="tabular font-mono text-xs text-ink-3">
               {firstOnPage}–{lastOnPage} of {total}
             </p>
 
@@ -300,7 +323,7 @@ export default function Dashboard() {
                 type="button"
                 disabled={page === 0 || loading}
                 onClick={() => setPage(page - 1)}
-                className="rounded-lg border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-medium transition hover:border-gray-300 disabled:opacity-40 disabled:hover:border-[var(--color-line)]"
+                className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium transition hover:border-ink disabled:opacity-40 disabled:hover:border-line"
               >
                 Previous
               </button>
@@ -311,14 +334,14 @@ export default function Dashboard() {
                   cursors.current[page + 1] = nextCursor;
                   setPage(page + 1);
                 }}
-                className="rounded-lg border border-[var(--color-line)] bg-white px-3.5 py-2 text-xs font-medium transition hover:border-gray-300 disabled:opacity-40 disabled:hover:border-[var(--color-line)]"
+                className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium transition hover:border-ink disabled:opacity-40 disabled:hover:border-line"
               >
                 Next
               </button>
             </div>
           </div>
         )}
-      </section>
+      </main>
     </div>
   );
 }

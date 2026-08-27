@@ -12,26 +12,26 @@ export default function FilePreview({ url, name, kind, className = 'h-96' }: Pro
       <img
         src={url}
         alt={name}
-        className={`w-full rounded-xl border border-[var(--color-line)] object-contain ${className}`}
+        className={`w-full rounded-xl border border-line bg-ground object-contain ${className}`}
       />
     );
   }
 
   return (
     <div>
-      {/* Chrome renders PDFs in an iframe but not in an <object>, which silently paints
-          nothing. Mobile browsers generally render neither, hence the link below. */}
+      {/* Chrome renders PDFs in an iframe but paints nothing for an <object>. Mobile
+          browsers generally render neither, hence the link below. */}
       <iframe
         src={url}
         title={`Preview of ${name}`}
-        className={`w-full rounded-xl border border-[var(--color-line)] bg-gray-50 ${className}`}
+        className={`w-full rounded-xl border border-line bg-ground ${className}`}
       />
 
       <a
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-2 inline-block text-xs font-medium text-[var(--color-accent)]"
+        className="mt-2 inline-block font-mono text-xs text-accent underline-offset-4 hover:underline"
       >
         Open in a new tab
       </a>

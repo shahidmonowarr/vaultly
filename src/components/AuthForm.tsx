@@ -12,9 +12,9 @@ interface Props {
 const copy = {
   login: {
     title: 'Sign in',
-    subtitle: 'Welcome back.',
+    subtitle: 'Your files are where you left them.',
     action: 'Sign in',
-    footer: 'Need an account?',
+    footer: 'No account yet?',
     link: '/register',
     linkLabel: 'Create one',
   },
@@ -22,11 +22,14 @@ const copy = {
     title: 'Create an account',
     subtitle: 'Ten characters or more for the password.',
     action: 'Create account',
-    footer: 'Already registered?',
+    footer: 'Already have an account?',
     link: '/login',
     linkLabel: 'Sign in',
   },
 } as const;
+
+const field =
+  'mt-1.5 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition focus:border-accent';
 
 export default function AuthForm({ mode }: Props) {
   const router = useRouter();
@@ -67,10 +70,10 @@ export default function AuthForm({ mode }: Props) {
 
   return (
     <form onSubmit={submit} noValidate>
-      <h1 className="text-xl font-semibold">{text.title}</h1>
-      <p className="mt-1 text-sm text-[var(--color-muted)]">{text.subtitle}</p>
+      <h1 className="font-display text-xl font-bold tracking-tight">{text.title}</h1>
+      <p className="mt-1 text-sm text-ink-3">{text.subtitle}</p>
 
-      <label className="mt-6 block text-sm font-medium" htmlFor="email">
+      <label className="mt-7 block text-[13px] font-medium" htmlFor="email">
         Email
       </label>
       <input
@@ -80,11 +83,11 @@ export default function AuthForm({ mode }: Props) {
         required
         value={email}
         onChange={(event) => setEmail(event.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+        className={field}
       />
-      {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
+      {fieldErrors.email && <p className="mt-1.5 text-xs text-danger">{fieldErrors.email}</p>}
 
-      <label className="mt-4 block text-sm font-medium" htmlFor="password">
+      <label className="mt-4 block text-[13px] font-medium" htmlFor="password">
         Password
       </label>
       <input
@@ -94,12 +97,15 @@ export default function AuthForm({ mode }: Props) {
         required
         value={password}
         onChange={(event) => setPassword(event.target.value)}
-        className="mt-1.5 w-full rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)]"
+        className={field}
       />
-      {fieldErrors.password && <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>}
+      {fieldErrors.password && <p className="mt-1.5 text-xs text-danger">{fieldErrors.password}</p>}
 
       {message && (
-        <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mt-4 rounded-xl border border-[#f2c8c4] bg-[#fdf2f1] px-3.5 py-2.5 text-sm text-danger"
+        >
           {message}
         </p>
       )}
@@ -107,14 +113,14 @@ export default function AuthForm({ mode }: Props) {
       <button
         type="submit"
         disabled={pending}
-        className="mt-6 w-full rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+        className="mt-6 w-full rounded-xl bg-ink px-4 py-3 text-sm font-medium text-white transition hover:bg-accent disabled:opacity-50"
       >
-        {pending ? 'Working…' : text.action}
+        {pending ? 'Working' : text.action}
       </button>
 
-      <p className="mt-5 text-center text-sm text-[var(--color-muted)]">
+      <p className="mt-6 text-center text-[13px] text-ink-3">
         {text.footer}{' '}
-        <Link href={text.link} className="font-medium text-[var(--color-accent)]">
+        <Link href={text.link} className="font-medium text-accent underline-offset-4 hover:underline">
           {text.linkLabel}
         </Link>
       </p>

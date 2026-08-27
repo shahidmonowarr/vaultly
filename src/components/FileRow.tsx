@@ -13,6 +13,8 @@ interface Props {
   onDelete: (file: StoredFile) => Promise<void>;
 }
 
+const action = 'text-[13px] font-medium text-ink-3 transition hover:text-ink disabled:opacity-40';
+
 export default function FileRow({ file, onRename, onToggleVisibility, onDelete }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(file.name);
@@ -21,11 +23,12 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
   const [showPreview, setShowPreview] = useState(false);
 
   const preview = previewKind(file.mimeType);
+  const isPublic = file.visibility === 'public';
 
-  async function run(action: () => Promise<void>) {
+  async function run(task: () => Promise<void>) {
     setBusy(true);
     try {
-      await action();
+      await task();
     } finally {
       setBusy(false);
     }
@@ -40,10 +43,9 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
   }
 
   return (
-    <li className="px-4 py-3.5">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:flex-nowrap">
-        {/* Full width on small screens so the name keeps its line and the actions wrap under it. */}
-        <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+    <li className="px-4 py-3 transition-colors hover:bg-[#f7f9fc] sm:px-5">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_5rem_16.5rem]">
+        <div className="min-w-0">
           {editing ? (
             <form
               onSubmit={async (event) => {
@@ -60,58 +62,66 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
                   setDraft(file.name);
                   setEditing(false);
                 }}
-                className="w-full rounded-md border border-[var(--color-accent)] px-2 py-1 text-sm outline-none"
+                className="w-full rounded-lg border border-accent bg-surface px-2 py-1 text-sm outline-none"
               />
             </form>
           ) : (
             <button
               type="button"
               onClick={() => setEditing(true)}
-              title="Click to rename"
-              className="block max-w-full truncate text-left text-sm font-medium hover:text-[var(--color-accent)]"
+              title="Rename"
+              className="block max-w-full truncate text-left text-sm font-medium transition hover:text-accent"
             >
               {file.name}
             </button>
           )}
 
-          <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+          <p className="tabular mt-1 font-mono text-xs text-ink-3 sm:hidden">
             {formatBytes(file.size)} · {formatDate(file.createdAt)}
-            {file.downloadCount > 0 && ` · ${file.downloadCount} downloads`}
           </p>
         </div>
+
+        <p className="tabular hidden font-mono text-[13px] text-ink-2 sm:block">
+          {formatBytes(file.size)}
+        </p>
+
+        <p className="tabular hidden font-mono text-[13px] text-ink-3 sm:block">
+          {formatDate(file.createdAt)}
+        </p>
 
         <button
           type="button"
           disabled={busy}
           onClick={() => run(() => onToggleVisibility(file))}
-          className={`rounded-full px-3 py-1 text-xs font-medium transition disabled:opacity-50 ${
-            file.visibility === 'public'
-              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          title={isPublic ? 'Make private and kill the link' : 'Publish a share link'}
+          className={`justify-self-start rounded-full px-2.5 py-1 font-mono text-xs transition disabled:opacity-50 ${
+            isPublic
+              ? 'bg-signal-soft text-signal hover:brightness-95'
+              : 'bg-ground text-ink-3 hover:text-ink'
           }`}
         >
-          {file.visibility === 'public' ? 'Public' : 'Private'}
+          {isPublic ? 'public' : 'private'}
         </button>
 
-        <div className="ml-auto flex items-center gap-3 text-xs font-medium">
+        <div className="col-span-2 flex flex-wrap items-center gap-x-4 gap-y-2 sm:col-span-1 sm:justify-end">
           {preview && (
             <button
               type="button"
               onClick={() => setShowPreview(!showPreview)}
               aria-expanded={showPreview}
-              className="hover:text-[var(--color-accent)]"
+              className={action}
             >
               {showPreview ? 'Hide' : 'Preview'}
             </button>
           )}
 
           {file.shareUrl && (
-            <button type="button" onClick={copyLink} className="hover:text-[var(--color-accent)]">
+            <button type="button" onClick={copyLink} className={action}>
               {copied ? 'Copied' : 'Copy link'}
             </button>
           )}
 
-          <a href={`/api/v1/files/${file.id}/download`} className="hover:text-[var(--color-accent)]">
+          <a href={`/api/v1/files/${file.id}/download`} className={action}>
             Download
           </a>
 
@@ -119,7 +129,7 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
             type="button"
             disabled={busy}
             onClick={() => run(() => onDelete(file))}
-            className="text-red-600 hover:text-red-700 disabled:opacity-50"
+            className="text-[13px] font-medium text-danger transition hover:brightness-90 disabled:opacity-40"
           >
             Delete
           </button>
@@ -132,7 +142,7 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
             url={`/api/v1/files/${file.id}/download?inline=1`}
             name={file.name}
             kind={preview}
-            className="h-72"
+            className="h-80"
           />
         </div>
       )}

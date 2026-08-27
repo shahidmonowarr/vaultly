@@ -26,23 +26,25 @@ export default function Dropzone({ maxFileSize, onFiles }: Props) {
       }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
-      className={`rounded-2xl border-2 border-dashed p-8 text-center transition ${
-        dragging
-          ? 'border-[var(--color-accent)] bg-blue-50/60'
-          : 'border-[var(--color-line)] bg-white'
+      className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dashed px-5 py-6 transition ${
+        dragging ? 'border-accent bg-accent-soft' : 'border-line-strong bg-surface'
       }`}
     >
-      <p className="text-sm font-medium">Drop files here</p>
-      <p className="mt-1 text-sm text-[var(--color-muted)]">
-        Up to {formatBytes(maxFileSize)} per file
-      </p>
+      <div>
+        <p className="font-display text-base font-semibold">
+          {dragging ? 'Drop to upload' : 'Drop files here'}
+        </p>
+        <p className="mt-1 font-mono text-[13px] text-ink-3">
+          up to {formatBytes(maxFileSize)} each
+        </p>
+      </div>
 
       <button
         type="button"
         onClick={() => input.current?.click()}
-        className="mt-4 rounded-lg border border-[var(--color-line)] bg-white px-4 py-2 text-sm font-medium transition hover:border-gray-300"
+        className="rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm font-medium transition hover:border-ink"
       >
-        Browse files
+        Choose files
       </button>
 
       <input

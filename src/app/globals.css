@@ -1,10 +1,22 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-ink: #0f1115;
-  --color-muted: #6b7280;
-  --color-line: #e5e7eb;
-  --color-accent: #2f6df6;
+  --color-ground: #edf0f6;
+  --color-surface: #ffffff;
+  --color-ink: #0c1220;
+  --color-ink-2: #414d63;
+  --color-ink-3: #77839a;
+  --color-line: #dce2ec;
+  --color-line-strong: #c3ccdb;
+  --color-accent: #2a2fd0;
+  --color-accent-soft: #e9eaff;
+  --color-signal: #a65a00;
+  --color-signal-soft: #fdf1dc;
+  --color-danger: #b42318;
+
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
 html {
@@ -12,8 +24,37 @@ html {
 }
 
 body {
-  background: #fbfbfd;
+  background: var(--color-ground);
   color: var(--color-ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv05' 1;
+}
+
+/* Storage blocks, at the threshold of visibility. Used only on the pages a signed-out
+   visitor sees, never behind the working surfaces of the app. */
+.grid-ground {
+  background-image:
+    linear-gradient(to right, rgba(12, 18, 32, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(12, 18, 32, 0.045) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
