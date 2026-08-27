@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import Dropzone from '@/components/Dropzone';
-import FileRow from '@/components/FileRow';
+import FileInspector from '@/components/FileInspector';
+import FileListRow from '@/components/FileListRow';
 import Toaster, { type Toast } from '@/components/Toaster';
 import UploadList, { type UploadItem } from '@/components/UploadList';
 import { api, RequestError } from '@/lib/api';
@@ -20,6 +22,7 @@ export default function Dashboard() {
 
   const [user, setUser] = useState<SessionUser | null>(null);
   const [files, setFiles] = useState<StoredFile[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [storage, setStorage] = useState<StorageUsage | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [search, setSearch] = useState('');
@@ -32,6 +35,9 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<StoredFile | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [isWide, setIsWide] = useState(false);
 
   // Keyset pagination only hands out a cursor for the next page, so the cursor that
   // opened each visited page is kept here to make backwards navigation possible.
@@ -98,6 +104,31 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [user, search, filter, page, loadPage]);
 
+  // The inspector is a side panel on a wide screen and a full screen sheet on a narrow
+  // one, so auto-selecting would hide the list behind a detail view on a phone.
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setIsWide(query.matches);
+
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+
+  // Keep a selection that still exists; only fall back to the first file on a wide screen,
+  // where the panel would otherwise sit empty beside a full list.
+  useEffect(() => {
+    if (files.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+
+    setSelectedId((current) => {
+      if (current && files.some((file) => file.id === current)) return current;
+      return isWide ? files[0]!.id : null;
+    });
+  }, [files, isWide]);
+
   function refreshCurrentPage() {
     void loadPage(page, { search, filter }).catch(() => undefined);
   }
@@ -141,6 +172,7 @@ export default function Dashboard() {
       handle.result
         .then((stored) => {
           setUploads((current) => current.filter((item) => item.id !== id));
+          if (isWide) setSelectedId(stored.id);
           pushToast(`${stored.name} uploaded`);
           goToFirstPage();
         })
@@ -225,29 +257,58 @@ export default function Dashboard() {
   }
 
   async function toggleVisibility(file: StoredFile) {
-    const visibility = file.visibility === 'public' ? 'private' : 'public';
+    setBusy(true);
+    try {
+      const visibility = file.visibility === 'public' ? 'private' : 'public';
 
-    const { data } = await api<{ data: StoredFile }>(`/api/v1/files/${file.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ visibility }),
-    });
+      const { data } = await api<{ data: StoredFile }>(`/api/v1/files/${file.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ visibility }),
+      });
 
-    setFiles((current) => current.map((item) => (item.id === file.id ? data : item)));
-    setPublicCount((current) => current + (visibility === 'public' ? 1 : -1));
-    pushToast(visibility === 'public' ? 'Share link created' : 'Share link revoked');
+      setFiles((current) => current.map((item) => (item.id === file.id ? data : item)));
+      pushToast(visibility === 'public' ? 'Share link created' : 'Share link revoked');
+
+      // The file may no longer belong in the active filter, and the counts in the header
+      // are now stale either way, so re-read the page rather than patching them by hand.
+      refreshCurrentPage();
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function deleteFile(file: StoredFile) {
-    if (!window.confirm(`Delete "${file.name}"? This cannot be undone.`)) return;
+  async function copyLink(file: StoredFile) {
+    if (!file.shareUrl) return;
 
-    await api(`/api/v1/files/${file.id}`, { method: 'DELETE' });
-    pushToast(`${file.name} deleted`);
+    try {
+      await navigator.clipboard.writeText(file.shareUrl);
+      pushToast('Share link copied');
+    } catch {
+      pushToast('Could not reach the clipboard', 'danger');
+    }
+  }
 
-    // Removing the last row of a page would leave it empty, so step back if that happens.
-    if (files.length === 1 && page > 0) {
-      setPage(page - 1);
-    } else {
-      refreshCurrentPage();
+  async function confirmDelete() {
+    const file = pendingDelete;
+    if (!file) return;
+
+    setPendingDelete(null);
+    setBusy(true);
+
+    try {
+      await api(`/api/v1/files/${file.id}`, { method: 'DELETE' });
+      pushToast(`${file.name} deleted`);
+
+      // Removing the last row of a page would leave it empty, so step back if that happens.
+      if (files.length === 1 && page > 0) {
+        setPage(page - 1);
+      } else {
+        refreshCurrentPage();
+      }
+    } catch (cause) {
+      pushToast(cause instanceof RequestError ? cause.message : 'Could not delete that file', 'danger');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -264,16 +325,18 @@ export default function Dashboard() {
     );
   }
 
+  const selected = files.find((file) => file.id === selectedId) ?? null;
   const usedPercent = storage ? Math.min(100, (storage.used / storage.quota) * 100) : 0;
   const firstOnPage = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const lastOnPage = page * PAGE_SIZE + files.length;
   const filtered = Boolean(search) || filter !== 'all';
   const showSkeleton = loading && files.length === 0;
+  const showPanel = files.length > 0;
 
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-3.5">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
           <div className="flex items-baseline gap-3">
             <span className="font-display text-base font-bold tracking-tight">Vaultly</span>
             <span className="hidden truncate font-mono text-xs text-ink-3 sm:block">
@@ -291,160 +354,164 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-5 pb-24 pt-8">
-        <h1 className="font-display text-2xl font-bold tracking-tight">Your files</h1>
-
-        <dl className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
-            <dt className="font-mono text-[11px] uppercase tracking-wider text-ink-3">Files</dt>
-            <dd className="tabular mt-1 font-mono text-xl">{total}</dd>
-          </div>
-
-          <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
-            <dt className="font-mono text-[11px] uppercase tracking-wider text-ink-3">Storage</dt>
-            <dd className="tabular mt-1 font-mono text-xl">
-              {storage ? formatBytes(storage.used) : '—'}
-            </dd>
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-ground">
-              <div className="h-full rounded-full bg-ink" style={{ width: `${usedPercent}%` }} />
+      <main
+        className={`mx-auto grid max-w-6xl gap-8 px-5 pb-24 pt-7 lg:items-start lg:gap-10 ${
+          showPanel ? 'lg:grid-cols-[minmax(0,1fr)_20rem]' : ''
+        }`}
+      >
+        <section className="min-w-0">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="font-display text-2xl font-bold tracking-tight">Your files</h1>
+              <p className="tabular mt-1 font-mono text-xs text-ink-3">
+                {total} {total === 1 ? 'file' : 'files'}
+                {storage && ` · ${formatBytes(storage.used)} of ${formatBytes(storage.quota)}`}
+                {` · ${publicCount} shared`}
+              </p>
             </div>
-            <p className="mt-1.5 font-mono text-[11px] text-ink-3">
-              of {storage ? formatBytes(storage.quota) : '—'}
-            </p>
-          </div>
 
-          <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
-            <dt className="font-mono text-[11px] uppercase tracking-wider text-ink-3">
-              Public links
-            </dt>
-            <dd className="tabular mt-1 font-mono text-xl">{publicCount}</dd>
-            <p className="mt-1.5 font-mono text-[11px] text-ink-3">
-              {publicCount === 0 ? 'nothing is shared' : 'reachable without an account'}
-            </p>
-          </div>
-        </dl>
-
-        <div className="mt-6">
-          <Dropzone
-            maxFileSize={storage?.maxFileSize ?? 512 * 1024 * 1024}
-            onFiles={startUploads}
-          />
-          <UploadList
-            uploads={uploads}
-            onDismiss={(id) => setUploads((current) => current.filter((item) => item.id !== id))}
-          />
-        </div>
-
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search files"
-            className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition focus:border-accent"
-          />
-
-          <div className="flex rounded-xl border border-line bg-surface p-1">
-            {(['all', 'private', 'public'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setFilter(value)}
-                className={`rounded-lg px-3 py-1.5 font-mono text-xs transition ${
-                  filter === value ? 'bg-ink text-white' : 'text-ink-3 hover:text-ink'
-                }`}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {error && (
-          <p
-            role="alert"
-            className="mt-4 rounded-xl border border-[#f2c8c4] bg-[#fdf2f1] px-4 py-3 text-sm text-danger"
-          >
-            {error}
-          </p>
-        )}
-
-        <section className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
-          {(files.length > 0 || showSkeleton) && (
-            <div className="hidden grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_5rem_16.5rem] gap-x-4 border-b border-line px-5 py-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-3 sm:grid">
-              <span>Name</span>
-              <span>Size</span>
-              <span>Added</span>
-              <span>Visibility</span>
-              <span className="sr-only">Actions</span>
+            <div className="w-28">
+              <div className="h-1 overflow-hidden rounded-full bg-line">
+                <div className="h-full rounded-full bg-ink" style={{ width: `${usedPercent}%` }} />
+              </div>
             </div>
+          </div>
+
+          <div className="mt-5">
+            <Dropzone
+              maxFileSize={storage?.maxFileSize ?? 512 * 1024 * 1024}
+              onFiles={startUploads}
+            />
+            <UploadList
+              uploads={uploads}
+              onDismiss={(id) => setUploads((current) => current.filter((item) => item.id !== id))}
+            />
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search files"
+              className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition focus:border-accent"
+            />
+
+            <div className="flex rounded-xl border border-line bg-surface p-1">
+              {(['all', 'private', 'public'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setFilter(value)}
+                  className={`rounded-lg px-3 py-1.5 font-mono text-xs transition ${
+                    filter === value ? 'bg-ink text-white' : 'text-ink-3 hover:text-ink'
+                  }`}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <p
+              role="alert"
+              className="mt-4 rounded-xl border border-[#f2c8c4] bg-[#fdf2f1] px-4 py-3 text-sm text-danger"
+            >
+              {error}
+            </p>
           )}
 
-          <ul className="divide-y divide-line">
+          <ul className="mt-3 flex flex-col gap-1">
             {showSkeleton &&
-              Array.from({ length: 4 }, (_, index) => (
-                <li key={index} className="flex items-center gap-3 px-5 py-4">
-                  <span className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-ground" />
-                  <span className="h-3 w-48 animate-pulse rounded bg-ground" />
-                  <span className="ml-auto h-3 w-24 animate-pulse rounded bg-ground" />
+              Array.from({ length: 5 }, (_, index) => (
+                <li key={index} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-line" />
+                  <span className="h-3 w-44 animate-pulse rounded bg-line" />
+                  <span className="ml-auto h-4 w-14 animate-pulse rounded-full bg-line" />
                 </li>
               ))}
 
             {!showSkeleton &&
               files.map((file) => (
-                <FileRow
+                <FileListRow
                   key={file.id}
                   file={file}
-                  onRename={renameFile}
-                  onToggleVisibility={toggleVisibility}
-                  onDelete={deleteFile}
-                  onToast={pushToast}
+                  selected={file.id === selectedId}
+                  onSelect={(picked) => setSelectedId(picked.id)}
                 />
               ))}
-
-            {files.length === 0 && !loading && (
-              <li className="px-5 py-16 text-center">
-                <p className="font-display text-lg font-semibold">
-                  {filtered ? 'Nothing matches those filters' : 'No files yet'}
-                </p>
-                <p className="mt-1.5 text-sm text-ink-3">
-                  {filtered
-                    ? 'Try a different search, or switch back to all.'
-                    : 'Drop a file anywhere on this page. It stays private until you publish a link.'}
-                </p>
-              </li>
-            )}
           </ul>
+
+          {files.length === 0 && !loading && (
+            <div className="mt-3 rounded-2xl border border-dashed border-line-strong px-5 py-14 text-center">
+              <p className="font-display text-lg font-semibold">
+                {filtered ? 'Nothing matches those filters' : 'No files yet'}
+              </p>
+              <p className="mt-1.5 text-sm text-ink-3">
+                {filtered
+                  ? 'Try a different search, or switch back to all.'
+                  : 'Drop a file anywhere on this page. It stays private until you publish a link.'}
+              </p>
+            </div>
+          )}
+
+          {total > 0 && (
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <p className="tabular font-mono text-xs text-ink-3">
+                {firstOnPage}–{lastOnPage} of {total}
+              </p>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={page === 0 || loading}
+                  onClick={() => setPage(page - 1)}
+                  className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium transition hover:border-ink disabled:opacity-40 disabled:hover:border-line"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={!nextCursor || loading}
+                  onClick={() => {
+                    cursors.current[page + 1] = nextCursor;
+                    setPage(page + 1);
+                  }}
+                  className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium transition hover:border-ink disabled:opacity-40 disabled:hover:border-line"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
-        {total > 0 && (
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <p className="tabular font-mono text-xs text-ink-3">
-              {firstOnPage}–{lastOnPage} of {total}
-            </p>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={page === 0 || loading}
-                onClick={() => setPage(page - 1)}
-                className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium transition hover:border-ink disabled:opacity-40 disabled:hover:border-line"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={!nextCursor || loading}
-                onClick={() => {
-                  cursors.current[page + 1] = nextCursor;
-                  setPage(page + 1);
-                }}
-                className="rounded-lg border border-line bg-surface px-3.5 py-2 text-[13px] font-medium transition hover:border-ink disabled:opacity-40 disabled:hover:border-line"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+        {showPanel && (
+          <aside
+            className={`${
+              selected ? 'fixed inset-0 z-40 overflow-y-auto bg-surface p-5' : 'hidden'
+            } lg:sticky lg:top-24 lg:z-auto lg:block lg:overflow-visible lg:rounded-2xl lg:border lg:border-line lg:bg-surface lg:p-5`}
+          >
+            {selected ? (
+              <FileInspector
+                file={selected}
+                busy={busy}
+                onRename={renameFile}
+                onToggleVisibility={toggleVisibility}
+                onDelete={setPendingDelete}
+                onCopyLink={copyLink}
+                onClose={() => setSelectedId(null)}
+              />
+            ) : (
+              <div className="py-10 text-center">
+                <p className="text-sm font-medium">Nothing selected</p>
+                <p className="mt-1 text-[13px] text-ink-3">
+                  Pick a file to see its preview and share controls.
+                </p>
+              </div>
+            )}
+          </aside>
         )}
       </main>
 
@@ -458,6 +525,19 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete this file?"
+        body={
+          pendingDelete
+            ? `${pendingDelete.name} and any link to it are removed for good. This cannot be undone.`
+            : ''
+        }
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
 
       <Toaster
         toasts={toasts}
