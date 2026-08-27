@@ -94,16 +94,21 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
         loadPage(page, { search, filter })
-          .catch((cause) =>
-            setError(cause instanceof RequestError ? cause.message : 'Could not load your files'),
-          )
+          .catch((cause) => {
+            if (cause instanceof RequestError && cause.status === 401) {
+              router.replace('/login');
+              return;
+            }
+
+            setError(cause instanceof RequestError ? cause.message : 'Could not load your files');
+          })
           .finally(() => setLoading(false));
       },
       search ? 250 : 0,
     );
 
     return () => clearTimeout(timer);
-  }, [user, search, filter, page, loadPage]);
+  }, [user, search, filter, page, loadPage, router]);
 
   // The inspector is a side panel on a wide screen and a full screen sheet on a narrow
   // one, so auto-selecting would hide the list behind a detail view on a phone.
@@ -129,6 +134,20 @@ export default function Dashboard() {
       return isWide ? files[0]!.id : null;
     });
   }, [files, isWide]);
+
+  // A 401 that survives the silent refresh means the session is finished, so send the
+  // person to sign in rather than leaving them on a dashboard that cannot load.
+  const handleFailure = useCallback(
+    (cause: unknown, fallback: string) => {
+      if (cause instanceof RequestError && cause.status === 401) {
+        router.replace('/login');
+        return;
+      }
+
+      pushToast(cause instanceof RequestError ? cause.message : fallback, 'danger');
+    },
+    [router, pushToast],
+  );
 
   function refreshCurrentPage() {
     void loadPage(page, { search, filter }).catch(() => undefined);
@@ -307,7 +326,7 @@ export default function Dashboard() {
         refreshCurrentPage();
       }
     } catch (cause) {
-      pushToast(cause instanceof RequestError ? cause.message : 'Could not delete that file', 'danger');
+      handleFailure(cause, 'Could not delete that file');
     } finally {
       setBusy(false);
     }
@@ -395,6 +414,7 @@ export default function Dashboard() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              aria-label="Search files by name"
               placeholder="Search files"
               className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm outline-none transition focus:border-accent"
             />
@@ -405,6 +425,7 @@ export default function Dashboard() {
                   key={value}
                   type="button"
                   onClick={() => setFilter(value)}
+                  aria-pressed={filter === value}
                   className={`rounded-lg px-3 py-1.5 font-mono text-xs transition ${
                     filter === value ? 'bg-ink text-white' : 'text-ink-3 hover:text-ink'
                   }`}

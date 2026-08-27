@@ -51,6 +51,7 @@ export default function FileInspector({
             >
               <input
                 autoFocus
+                aria-label="File name"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onBlur={() => {
