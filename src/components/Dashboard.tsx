@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import Dropzone from '@/components/Dropzone';
@@ -338,7 +339,12 @@ export default function Dashboard() {
       <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5">
           <div className="flex items-baseline gap-3">
-            <span className="font-display text-base font-bold tracking-tight">Vaultly</span>
+            <Link
+              href="/"
+              className="font-display text-base font-bold tracking-tight transition hover:text-accent"
+            >
+              Vaultly
+            </Link>
             <span className="hidden truncate font-mono text-xs text-ink-3 sm:block">
               {user.email}
             </span>
@@ -354,11 +360,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main
-        className={`mx-auto grid max-w-6xl gap-8 px-5 pb-24 pt-7 lg:items-start lg:gap-10 ${
-          showPanel ? 'lg:grid-cols-[minmax(0,1fr)_20rem]' : ''
-        }`}
-      >
+      <main className="mx-auto grid max-w-6xl gap-8 px-5 pb-24 pt-7 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-10">
         <section className="min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -487,32 +489,45 @@ export default function Dashboard() {
           )}
         </section>
 
-        {showPanel && (
-          <aside
-            className={`${
-              selected ? 'fixed inset-0 z-40 overflow-y-auto bg-surface p-5' : 'hidden'
-            } lg:sticky lg:top-24 lg:z-auto lg:block lg:overflow-visible lg:rounded-2xl lg:border lg:border-line lg:bg-surface lg:p-5`}
-          >
-            {selected ? (
-              <FileInspector
-                file={selected}
-                busy={busy}
-                onRename={renameFile}
-                onToggleVisibility={toggleVisibility}
-                onDelete={setPendingDelete}
-                onCopyLink={copyLink}
-                onClose={() => setSelectedId(null)}
-              />
-            ) : (
-              <div className="py-10 text-center">
-                <p className="text-sm font-medium">Nothing selected</p>
-                <p className="mt-1 text-[13px] text-ink-3">
-                  Pick a file to see its preview and share controls.
-                </p>
-              </div>
-            )}
-          </aside>
-        )}
+        <aside
+          className={`${
+            selected ? 'fixed inset-0 z-40 overflow-y-auto bg-surface p-5' : 'hidden'
+          } lg:sticky lg:top-24 lg:z-auto lg:block lg:overflow-visible lg:rounded-2xl lg:border lg:border-line lg:bg-surface lg:p-5`}
+        >
+          {selected ? (
+            <FileInspector
+              file={selected}
+              busy={busy}
+              onRename={renameFile}
+              onToggleVisibility={toggleVisibility}
+              onDelete={setPendingDelete}
+              onCopyLink={copyLink}
+              onClose={() => setSelectedId(null)}
+            />
+          ) : showPanel ? (
+            <div className="py-10 text-center">
+              <p className="text-sm font-medium">Nothing selected</p>
+              <p className="mt-1 text-[13px] text-ink-3">
+                Pick a file to see its preview and share controls.
+              </p>
+            </div>
+          ) : (
+            // With no files at all the panel still holds its column, so the page does not
+            // reflow the moment the last file goes. It explains itself rather than sitting blank.
+            <div className="flex flex-col gap-3 py-6">
+              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-3">
+                File details
+              </p>
+              <p className="text-[13px] leading-relaxed text-ink-2">
+                Select a file and its preview, size, share link and download all appear here.
+              </p>
+              <p className="text-[13px] leading-relaxed text-ink-3">
+                Everything you upload starts private. A file is only reachable by anyone else
+                once you turn its link on, and turning it off destroys that link for good.
+              </p>
+            </div>
+          )}
+        </aside>
       </main>
 
       {dragging && (
