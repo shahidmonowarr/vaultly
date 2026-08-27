@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import FileMark from '@/components/FileMark';
 import FilePreview from '@/components/FilePreview';
 import { formatBytes, formatDate } from '@/lib/format';
 import { previewKind } from '@/lib/preview';
@@ -11,19 +12,20 @@ interface Props {
   onRename: (id: string, name: string) => Promise<void>;
   onToggleVisibility: (file: StoredFile) => Promise<void>;
   onDelete: (file: StoredFile) => Promise<void>;
+  onToast: (message: string, tone?: 'neutral' | 'danger') => void;
 }
 
 const action = 'text-[13px] font-medium text-ink-3 transition hover:text-ink disabled:opacity-40';
 
-export default function FileRow({ file, onRename, onToggleVisibility, onDelete }: Props) {
+export default function FileRow({ file, onRename, onToggleVisibility, onDelete, onToast }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(file.name);
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   const preview = previewKind(file.mimeType);
   const isPublic = file.visibility === 'public';
+  const inlineUrl = `/api/v1/files/${file.id}/download?inline=1`;
 
   async function run(task: () => Promise<void>) {
     setBusy(true);
@@ -37,48 +39,59 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
   async function copyLink() {
     if (!file.shareUrl) return;
 
-    await navigator.clipboard.writeText(file.shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(file.shareUrl);
+      onToast('Share link copied');
+    } catch {
+      onToast('Could not reach the clipboard', 'danger');
+    }
   }
 
   return (
-    <li className="px-4 py-3 transition-colors hover:bg-[#f7f9fc] sm:px-5">
+    <li className="group px-4 py-3 transition-colors hover:bg-[#f7f9fc] sm:px-5">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_5rem_16.5rem]">
-        <div className="min-w-0">
-          {editing ? (
-            <form
-              onSubmit={async (event) => {
-                event.preventDefault();
-                await run(() => onRename(file.id, draft.trim()));
-                setEditing(false);
-              }}
-            >
-              <input
-                autoFocus
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onBlur={() => {
-                  setDraft(file.name);
+        <div className="flex min-w-0 items-center gap-3">
+          <FileMark
+            name={file.name}
+            mimeType={file.mimeType}
+            thumbnailUrl={preview === 'image' ? inlineUrl : undefined}
+          />
+
+          <div className="min-w-0">
+            {editing ? (
+              <form
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  await run(() => onRename(file.id, draft.trim()));
                   setEditing(false);
                 }}
-                className="w-full rounded-lg border border-accent bg-surface px-2 py-1 text-sm outline-none"
-              />
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              title="Rename"
-              className="block max-w-full truncate text-left text-sm font-medium transition hover:text-accent"
-            >
-              {file.name}
-            </button>
-          )}
+              >
+                <input
+                  autoFocus
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onBlur={() => {
+                    setDraft(file.name);
+                    setEditing(false);
+                  }}
+                  className="w-full rounded-lg border border-accent bg-surface px-2 py-1 text-sm outline-none"
+                />
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                title="Rename"
+                className="block max-w-full truncate text-left text-sm font-medium transition hover:text-accent"
+              >
+                {file.name}
+              </button>
+            )}
 
-          <p className="tabular mt-1 font-mono text-xs text-ink-3 sm:hidden">
-            {formatBytes(file.size)} · {formatDate(file.createdAt)}
-          </p>
+            <p className="tabular mt-0.5 font-mono text-xs text-ink-3 sm:hidden">
+              {formatBytes(file.size)} · {formatDate(file.createdAt)}
+            </p>
+          </div>
         </div>
 
         <p className="tabular hidden font-mono text-[13px] text-ink-2 sm:block">
@@ -117,7 +130,7 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
 
           {file.shareUrl && (
             <button type="button" onClick={copyLink} className={action}>
-              {copied ? 'Copied' : 'Copy link'}
+              Copy link
             </button>
           )}
 
@@ -137,13 +150,8 @@ export default function FileRow({ file, onRename, onToggleVisibility, onDelete }
       </div>
 
       {preview && showPreview && (
-        <div className="mt-3">
-          <FilePreview
-            url={`/api/v1/files/${file.id}/download?inline=1`}
-            name={file.name}
-            kind={preview}
-            className="h-80"
-          />
+        <div className="mt-3 sm:pl-12">
+          <FilePreview url={inlineUrl} name={file.name} kind={preview} className="h-80" />
         </div>
       )}
     </li>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Dropzone from '@/components/Dropzone';
 import FileRow from '@/components/FileRow';
+import Toaster, { type Toast } from '@/components/Toaster';
 import UploadList, { type UploadItem } from '@/components/UploadList';
 import { api, RequestError } from '@/lib/api';
 import { formatBytes } from '@/lib/format';
@@ -26,13 +27,23 @@ export default function Dashboard() {
   const [page, setPage] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
+  const [publicCount, setPublicCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [dragging, setDragging] = useState(false);
 
   // Keyset pagination only hands out a cursor for the next page, so the cursor that
   // opened each visited page is kept here to make backwards navigation possible.
   const cursors = useRef<(string | null)[]>([null]);
   const uploadCounter = useRef(0);
+  const toastCounter = useRef(0);
+
+  const pushToast = useCallback((message: string, tone: Toast['tone'] = 'neutral') => {
+    toastCounter.current += 1;
+    const id = toastCounter.current;
+    setToasts((current) => [...current, { id, message, tone }]);
+  }, []);
 
   const loadPage = useCallback(
     async (target: number, options: { search: string; filter: Filter }) => {
@@ -43,12 +54,16 @@ export default function Dashboard() {
       if (options.search) params.set('search', options.search);
       if (options.filter !== 'all') params.set('visibility', options.filter);
 
-      const response = await api<FileListResponse>(`/api/v1/files?${params}`);
+      const [listed, shared] = await Promise.all([
+        api<FileListResponse>(`/api/v1/files?${params}`),
+        api<FileListResponse>('/api/v1/files?limit=1&visibility=public'),
+      ]);
 
-      setFiles(response.data);
-      setNextCursor(response.pagination.nextCursor);
-      setTotal(response.pagination.total);
-      setStorage(response.storage);
+      setFiles(listed.data);
+      setNextCursor(listed.pagination.nextCursor);
+      setTotal(listed.pagination.total);
+      setStorage(listed.storage);
+      setPublicCount(shared.pagination.total);
     },
     [],
   );
@@ -124,8 +139,9 @@ export default function Dashboard() {
       ]);
 
       handle.result
-        .then(() => {
+        .then((stored) => {
           setUploads((current) => current.filter((item) => item.id !== id));
+          pushToast(`${stored.name} uploaded`);
           goToFirstPage();
         })
         .catch((cause) => {
@@ -149,6 +165,53 @@ export default function Dashboard() {
     }
   }
 
+  // Dropping anywhere on the page uploads, which is what people try first. The ref keeps
+  // the listeners stable while still calling the current handler.
+  const dropHandler = useRef(startUploads);
+  dropHandler.current = startUploads;
+
+  useEffect(() => {
+    let depth = 0;
+    const carriesFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files');
+
+    const onEnter = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      depth += 1;
+      setDragging(true);
+    };
+
+    const onLeave = () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setDragging(false);
+    };
+
+    const onOver = (event: DragEvent) => {
+      if (carriesFiles(event)) event.preventDefault();
+    };
+
+    const onDrop = (event: DragEvent) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      depth = 0;
+      setDragging(false);
+
+      const dropped = Array.from(event.dataTransfer?.files ?? []);
+      if (dropped.length > 0) dropHandler.current(dropped);
+    };
+
+    window.addEventListener('dragenter', onEnter);
+    window.addEventListener('dragleave', onLeave);
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('drop', onDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', onEnter);
+      window.removeEventListener('dragleave', onLeave);
+      window.removeEventListener('dragover', onOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
+
   async function renameFile(id: string, name: string) {
     if (!name) return;
 
@@ -158,6 +221,7 @@ export default function Dashboard() {
     });
 
     setFiles((current) => current.map((file) => (file.id === id ? data : file)));
+    pushToast('Renamed');
   }
 
   async function toggleVisibility(file: StoredFile) {
@@ -169,12 +233,15 @@ export default function Dashboard() {
     });
 
     setFiles((current) => current.map((item) => (item.id === file.id ? data : item)));
+    setPublicCount((current) => current + (visibility === 'public' ? 1 : -1));
+    pushToast(visibility === 'public' ? 'Share link created' : 'Share link revoked');
   }
 
   async function deleteFile(file: StoredFile) {
     if (!window.confirm(`Delete "${file.name}"? This cannot be undone.`)) return;
 
     await api(`/api/v1/files/${file.id}`, { method: 'DELETE' });
+    pushToast(`${file.name} deleted`);
 
     // Removing the last row of a page would leave it empty, so step back if that happens.
     if (files.length === 1 && page > 0) {
@@ -201,10 +268,11 @@ export default function Dashboard() {
   const firstOnPage = total === 0 ? 0 : page * PAGE_SIZE + 1;
   const lastOnPage = page * PAGE_SIZE + files.length;
   const filtered = Boolean(search) || filter !== 'all';
+  const showSkeleton = loading && files.length === 0;
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-line bg-surface/85 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-3.5">
           <div className="flex items-baseline gap-3">
             <span className="font-display text-base font-bold tracking-tight">Vaultly</span>
@@ -223,23 +291,49 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-5 pb-20 pt-7">
-        <Dropzone maxFileSize={storage?.maxFileSize ?? 512 * 1024 * 1024} onFiles={startUploads} />
-        <UploadList
-          uploads={uploads}
-          onDismiss={(id) => setUploads((current) => current.filter((item) => item.id !== id))}
-        />
+      <main className="mx-auto max-w-5xl px-5 pb-24 pt-8">
+        <h1 className="font-display text-2xl font-bold tracking-tight">Your files</h1>
 
-        {storage && (
-          <div className="mt-6 flex items-center gap-3">
-            <div className="h-1 w-32 overflow-hidden rounded-full bg-line">
+        <dl className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
+            <dt className="font-mono text-[11px] uppercase tracking-wider text-ink-3">Files</dt>
+            <dd className="tabular mt-1 font-mono text-xl">{total}</dd>
+          </div>
+
+          <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
+            <dt className="font-mono text-[11px] uppercase tracking-wider text-ink-3">Storage</dt>
+            <dd className="tabular mt-1 font-mono text-xl">
+              {storage ? formatBytes(storage.used) : '—'}
+            </dd>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-ground">
               <div className="h-full rounded-full bg-ink" style={{ width: `${usedPercent}%` }} />
             </div>
-            <span className="tabular font-mono text-xs text-ink-3">
-              {formatBytes(storage.used)} of {formatBytes(storage.quota)}
-            </span>
+            <p className="mt-1.5 font-mono text-[11px] text-ink-3">
+              of {storage ? formatBytes(storage.quota) : '—'}
+            </p>
           </div>
-        )}
+
+          <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
+            <dt className="font-mono text-[11px] uppercase tracking-wider text-ink-3">
+              Public links
+            </dt>
+            <dd className="tabular mt-1 font-mono text-xl">{publicCount}</dd>
+            <p className="mt-1.5 font-mono text-[11px] text-ink-3">
+              {publicCount === 0 ? 'nothing is shared' : 'reachable without an account'}
+            </p>
+          </div>
+        </dl>
+
+        <div className="mt-6">
+          <Dropzone
+            maxFileSize={storage?.maxFileSize ?? 512 * 1024 * 1024}
+            onFiles={startUploads}
+          />
+          <UploadList
+            uploads={uploads}
+            onDismiss={(id) => setUploads((current) => current.filter((item) => item.id !== id))}
+          />
+        </div>
 
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <input
@@ -276,7 +370,7 @@ export default function Dashboard() {
         )}
 
         <section className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
-          {files.length > 0 && (
+          {(files.length > 0 || showSkeleton) && (
             <div className="hidden grid-cols-[minmax(0,1fr)_5.5rem_6.5rem_5rem_16.5rem] gap-x-4 border-b border-line px-5 py-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-3 sm:grid">
               <span>Name</span>
               <span>Size</span>
@@ -287,15 +381,26 @@ export default function Dashboard() {
           )}
 
           <ul className="divide-y divide-line">
-            {files.map((file) => (
-              <FileRow
-                key={file.id}
-                file={file}
-                onRename={renameFile}
-                onToggleVisibility={toggleVisibility}
-                onDelete={deleteFile}
-              />
-            ))}
+            {showSkeleton &&
+              Array.from({ length: 4 }, (_, index) => (
+                <li key={index} className="flex items-center gap-3 px-5 py-4">
+                  <span className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-ground" />
+                  <span className="h-3 w-48 animate-pulse rounded bg-ground" />
+                  <span className="ml-auto h-3 w-24 animate-pulse rounded bg-ground" />
+                </li>
+              ))}
+
+            {!showSkeleton &&
+              files.map((file) => (
+                <FileRow
+                  key={file.id}
+                  file={file}
+                  onRename={renameFile}
+                  onToggleVisibility={toggleVisibility}
+                  onDelete={deleteFile}
+                  onToast={pushToast}
+                />
+              ))}
 
             {files.length === 0 && !loading && (
               <li className="px-5 py-16 text-center">
@@ -305,7 +410,7 @@ export default function Dashboard() {
                 <p className="mt-1.5 text-sm text-ink-3">
                   {filtered
                     ? 'Try a different search, or switch back to all.'
-                    : 'Drop one above. It stays private until you publish a link.'}
+                    : 'Drop a file anywhere on this page. It stays private until you publish a link.'}
                 </p>
               </li>
             )}
@@ -342,6 +447,22 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {dragging && (
+        <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center bg-ink/80 p-8 backdrop-blur-[3px]">
+          <div className="rounded-2xl border-2 border-dashed border-white/60 px-12 py-10 text-center">
+            <p className="font-display text-3xl font-bold text-white">Drop to upload</p>
+            <p className="mt-2 font-mono text-[13px] text-white/70">
+              straight to storage, in parallel parts
+            </p>
+          </div>
+        </div>
+      )}
+
+      <Toaster
+        toasts={toasts}
+        onExpire={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))}
+      />
     </div>
   );
 }
