@@ -6,9 +6,11 @@ import { formatBytes } from '@/lib/format';
 interface Props {
   maxFileSize: number;
   onFiles: (files: File[]) => void;
+  /** Name of the folder uploads will land in, or null for the root. */
+  destination: string | null;
 }
 
-export default function Dropzone({ maxFileSize, onFiles }: Props) {
+export default function Dropzone({ maxFileSize, onFiles, destination }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -32,7 +34,7 @@ export default function Dropzone({ maxFileSize, onFiles }: Props) {
     >
       <div>
         <p className="font-display text-base font-semibold">
-          {dragging ? 'Drop to upload' : 'Drop files here'}
+          {dragging ? 'Drop to upload' : `Drop files into ${destination ?? 'All files'}`}
         </p>
         <p className="mt-1 font-mono text-[13px] text-ink-3">
           up to {formatBytes(maxFileSize)} each

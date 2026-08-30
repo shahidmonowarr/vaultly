@@ -47,6 +47,24 @@ export const sessions = pgTable(
   }),
 );
 
+export const folders = pgTable(
+  'folders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    parentId: uuid('parent_id'),
+    name: text('name').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    ownerParentIdx: index('folders_owner_parent_idx').on(table.ownerId, table.parentId),
+  }),
+);
+
 export const files = pgTable(
   'files',
   {
@@ -63,6 +81,7 @@ export const files = pgTable(
     visibility: fileVisibility('visibility').notNull().default('private'),
     shareSlug: text('share_slug').unique(),
     status: fileStatus('status').notNull().default('pending'),
+    folderId: uuid('folder_id'),
     downloadCount: integer('download_count').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -80,4 +99,5 @@ export const rateLimits = pgTable('rate_limits', {
 });
 
 export type User = typeof users.$inferSelect;
+export type FolderRecord = typeof folders.$inferSelect;
 export type FileRecord = typeof files.$inferSelect;

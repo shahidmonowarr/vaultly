@@ -13,6 +13,7 @@ interface Props {
   onToggleVisibility: (file: StoredFile) => Promise<void>;
   onDelete: (file: StoredFile) => void;
   onCopyLink: (file: StoredFile) => void;
+  onMove: (file: StoredFile) => void;
   onClose: () => void;
 }
 
@@ -23,6 +24,7 @@ export default function FileInspector({
   onToggleVisibility,
   onDelete,
   onCopyLink,
+  onMove,
   onClose,
 }: Props) {
   const [editing, setEditing] = useState(false);
@@ -146,12 +148,21 @@ export default function FileInspector({
         )}
       </div>
 
-      <a
-        href={`/api/v1/files/${file.id}/download`}
-        className="rounded-xl bg-ink px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-accent"
-      >
-        Download
-      </a>
+      <div className="flex gap-2">
+        <a
+          href={`/api/v1/files/${file.id}/download`}
+          className="flex-1 rounded-xl bg-ink px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-accent"
+        >
+          Download
+        </a>
+        <button
+          type="button"
+          onClick={() => onMove(file)}
+          className="rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-sm font-medium transition hover:border-ink"
+        >
+          Move
+        </button>
+      </div>
 
       <div className="mt-auto border-t border-line pt-4">
         <button

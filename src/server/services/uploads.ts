@@ -57,7 +57,7 @@ function buildStorageKey(userId: string, fileId: string, name: string) {
 
 export async function initiateUpload(
   userId: string,
-  input: { name: string; mimeType: string; size: number },
+  input: { name: string; mimeType: string; size: number; folderId?: string | null },
 ): Promise<UploadTicket> {
   const name = sanitizeFileName(input.name);
   assertUploadableFile(name, input.mimeType);
@@ -89,6 +89,7 @@ export async function initiateUpload(
     name,
     mimeType: input.mimeType,
     sizeBytes: input.size,
+    folderId: input.folderId ?? null,
     status: 'pending',
   });
 

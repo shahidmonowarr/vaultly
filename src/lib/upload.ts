@@ -86,7 +86,11 @@ async function putPartWithRetry(
   throw lastError;
 }
 
-export function uploadFile(file: File, onProgress: (loaded: number) => void): UploadHandle {
+export function uploadFile(
+  file: File,
+  folderId: string | null,
+  onProgress: (loaded: number) => void,
+): UploadHandle {
   const controller = new AbortController();
 
   const result = (async () => {
@@ -96,6 +100,7 @@ export function uploadFile(file: File, onProgress: (loaded: number) => void): Up
         name: file.name,
         mimeType: file.type || 'application/octet-stream',
         size: file.size,
+        folderId,
       }),
     });
 
