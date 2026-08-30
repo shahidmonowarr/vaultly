@@ -215,7 +215,13 @@ The app deploys to any Node host. It is currently on Vercel with Neon for Postgr
 S3-compatible bucket for objects. Because uploads bypass the server entirely, the
 serverless request body limit never applies.
 
-Run `npm run db:migrate` against the production database after deploying.
+Migrations run as part of the deploy. Vercel prefers a `vercel-build` script over `build`,
+and this one is `npm run db:migrate && next build`, so the schema is always applied before
+the code that depends on it is served. If the database is unreachable the build fails
+rather than shipping code against a schema that is not there — which is the failure this
+replaced. The runner takes an advisory lock, so concurrent deploys cannot race each other.
+
+On other hosts, run `npm run db:migrate` before starting the server.
 
 ## Trade-offs and what I would do next
 
