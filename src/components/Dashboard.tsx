@@ -10,7 +10,10 @@ import FileInspector from '@/components/FileInspector';
 import FileListRow from '@/components/FileListRow';
 import FolderRow from '@/components/FolderRow';
 import MoveDialog from '@/components/MoveDialog';
+import FileCard from '@/components/FileCard';
+import FolderTile from '@/components/FolderTile';
 import Sidebar, { type View } from '@/components/Sidebar';
+import ViewToggle, { type ViewMode } from '@/components/ViewToggle';
 import SortControl from '@/components/SortControl';
 import Toaster, { type Toast } from '@/components/Toaster';
 import UploadList, { type UploadItem } from '@/components/UploadList';
@@ -47,6 +50,7 @@ export default function Dashboard() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [view, setView] = useState<View>('files');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sharedCount, setSharedCount] = useState(0);
   const [sort, setSort] = useState<SortField>('created');
   const [order, setOrder] = useState<SortOrder>('desc');
@@ -163,6 +167,26 @@ export default function Dashboard() {
 
     return () => clearTimeout(timer);
   }, [user, search, filter, folderId, sort, order, view, page, loadPage, router]);
+
+  // Remembered per browser: whichever way you last looked at your files is how they
+  // should look next time.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('vaultly:view-mode');
+      if (saved === 'grid' || saved === 'list') setViewMode(saved);
+    } catch {
+      // private mode, or storage blocked; the default is fine
+    }
+  }, []);
+
+  function changeViewMode(next: ViewMode) {
+    setViewMode(next);
+    try {
+      window.localStorage.setItem('vaultly:view-mode', next);
+    } catch {
+      // nothing to do; the choice just will not survive a reload
+    }
+  }
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 1024px)');
@@ -680,6 +704,8 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="mt-4 flex flex-wrap items-center gap-2">
+                <ViewToggle mode={viewMode} onChange={changeViewMode} />
+
                 <SortControl
                   sort={view === 'recent' ? 'created' : sort}
                   order={view === 'recent' ? 'desc' : order}
@@ -734,77 +760,127 @@ export default function Dashboard() {
               </p>
             )}
 
-            <ul className="mt-3 flex flex-col gap-1">
-              {creatingFolder && (
-                <li className="rounded-xl border border-accent bg-surface px-3 py-2.5">
-                  <form
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void createFolder();
-                    }}
-                  >
-                    <input
-                      autoFocus
-                      value={folderDraft}
-                      onChange={(event) => setFolderDraft(event.target.value)}
-                      onBlur={() => void createFolder()}
-                      aria-label="New folder name"
-                      placeholder="Folder name"
-                      className="w-full bg-transparent text-sm outline-none"
-                    />
-                  </form>
-                </li>
-              )}
+            {creatingFolder && (
+              <div className="mt-3 rounded-xl border border-accent bg-surface px-3 py-2.5">
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void createFolder();
+                  }}
+                >
+                  <input
+                    autoFocus
+                    value={folderDraft}
+                    onChange={(event) => setFolderDraft(event.target.value)}
+                    onBlur={() => void createFolder()}
+                    aria-label="New folder name"
+                    placeholder="Folder name"
+                    className="w-full bg-transparent text-sm outline-none"
+                  />
+                </form>
+              </div>
+            )}
 
-              {showSkeleton &&
-                Array.from({ length: 6 }, (_, index) => (
-                  <li key={index} className="flex items-center gap-3 px-3 py-2.5">
-                    <span className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-line" />
-                    <span className="h-3 w-44 animate-pulse rounded bg-line" />
-                    <span className="ml-auto h-4 w-14 animate-pulse rounded-full bg-line" />
+            {renamingFolder && (
+              <div className="mt-3 rounded-xl border border-accent bg-surface px-3 py-2.5">
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const value = new FormData(event.currentTarget).get('name');
+                    void renameFolder(String(value ?? ''));
+                  }}
+                >
+                  <input
+                    autoFocus
+                    name="name"
+                    defaultValue={renamingFolder.name}
+                    onBlur={() => setRenamingFolder(null)}
+                    aria-label="Folder name"
+                    className="w-full bg-transparent text-sm outline-none"
+                  />
+                </form>
+              </div>
+            )}
+
+            {showSkeleton && (
+              <ul
+                className={
+                  viewMode === 'grid'
+                    ? 'mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4'
+                    : 'mt-3 flex flex-col gap-1'
+                }
+              >
+                {Array.from({ length: viewMode === 'grid' ? 8 : 6 }, (_, index) => (
+                  <li
+                    key={index}
+                    className={
+                      viewMode === 'grid'
+                        ? 'h-44 animate-pulse rounded-xl bg-line'
+                        : 'flex items-center gap-3 px-3 py-2.5'
+                    }
+                  >
+                    {viewMode === 'list' && (
+                      <>
+                        <span className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-line" />
+                        <span className="h-3 w-44 animate-pulse rounded bg-line" />
+                        <span className="ml-auto h-4 w-14 animate-pulse rounded-full bg-line" />
+                      </>
+                    )}
                   </li>
                 ))}
+              </ul>
+            )}
 
-              {!showSkeleton &&
-                folders.map((folder) =>
-                  renamingFolder?.id === folder.id ? (
-                    <li
-                      key={folder.id}
-                      className="rounded-xl border border-accent bg-surface px-3 py-2.5"
-                    >
-                      <form
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          const value = new FormData(event.currentTarget).get('name');
-                          void renameFolder(String(value ?? ''));
-                        }}
-                      >
-                        <input
-                          autoFocus
-                          name="name"
-                          defaultValue={folder.name}
-                          onBlur={() => setRenamingFolder(null)}
-                          aria-label="Folder name"
-                          className="w-full bg-transparent text-sm outline-none"
-                        />
-                      </form>
-                    </li>
-                  ) : (
-                    <FolderRow
-                      key={folder.id}
-                      folder={folder}
-                      onOpen={(picked) => openFolder(picked.id)}
-                      onDropFiles={(target) =>
-                        dragIds.current.length && moveTo(dragIds.current, target)
-                      }
-                      onRename={setRenamingFolder}
-                      onDelete={askDeleteFolder}
-                    />
-                  ),
-                )}
+            {!showSkeleton && viewMode === 'grid' && (
+              <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                {folders.map((folder) => (
+                  <FolderTile
+                    key={folder.id}
+                    folder={folder}
+                    onOpen={(picked) => openFolder(picked.id)}
+                    onDropFiles={(target) => dragIds.current.length && moveTo(dragIds.current, target)}
+                    onRename={setRenamingFolder}
+                    onDelete={askDeleteFolder}
+                  />
+                ))}
 
-              {!showSkeleton &&
-                files.map((file) => (
+                {files.map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    selected={file.id === selectedId}
+                    checked={checked.has(file.id)}
+                    onSelect={(picked) => setSelectedId(picked.id)}
+                    onToggleCheck={toggleCheck}
+                    onDragStart={(picked) => {
+                      dragIds.current = checked.has(picked.id) ? [...checked] : [picked.id];
+                    }}
+                    onCopyLink={copyLink}
+                    onMove={(picked) => {
+                      dragIds.current = [picked.id];
+                      setChecked(new Set([picked.id]));
+                      setMoveOpen(true);
+                    }}
+                    onDelete={setPendingDelete}
+                  />
+                ))}
+              </ul>
+            )}
+
+            {!showSkeleton && viewMode === 'list' && (
+              <ul className="mt-3 flex flex-col gap-1">
+                {folders.map((folder) => (
+                  <FolderRow
+                    key={folder.id}
+                    folder={folder}
+                    onOpen={(picked) => openFolder(picked.id)}
+                    onDropFiles={(target) => dragIds.current.length && moveTo(dragIds.current, target)}
+                    onRename={setRenamingFolder}
+                    onDelete={askDeleteFolder}
+                  />
+                ))}
+
+                {files.map((file) => (
                   <FileListRow
                     key={file.id}
                     file={file}
@@ -817,7 +893,8 @@ export default function Dashboard() {
                     }}
                   />
                 ))}
-            </ul>
+              </ul>
+            )}
 
             {nothingHere &&
               (filtered ? (
